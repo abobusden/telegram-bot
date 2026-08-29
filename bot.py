@@ -31,6 +31,59 @@ RANKS = {
 
 MAX_UPGRADE_LEVEL = 10
 
+DAILY_QUESTS_POOL = {
+    'pvp_play': {'name': 'Сыграть в PvP', 'target': 1, 'coins': 20, 'xp': 15},
+    'pvp_win': {'name': 'Выиграть в PvP', 'target': 1, 'coins': 30, 'xp': 20},
+    'raid_play': {'name': 'Сыграть в режим рейд', 'target': 1, 'coins': 25, 'xp': 20},
+    'potion_use': {'name': 'Использовать зелье здоровья', 'target': 1, 'coins': 15, 'xp': 10},
+    'raid_top': {'name': 'Войти в топ 1-2 в рейде', 'target': 1, 'coins': 40, 'xp': 30}
+}
+
+WEEKLY_QUESTS = {
+    'wk_dmg_500': {'name': 'Нанести суммарно 500 урона Тирану', 'target': 500, 'coins': 150, 'xp': 100},
+    'wk_raid_3': {'name': 'Поучаствовать в 3 рейдах', 'target': 3, 'coins': 100, 'xp': 80},
+    'wk_dmg_1000': {'name': 'Нанести суммарно 1000 урона Тирану', 'target': 1000, 'coins': 300, 'xp': 200},
+    'wk_raid_5': {'name': 'Поучаствовать в 5 рейдах', 'target': 5, 'coins': 180, 'xp': 120},
+    'wk_raid_10': {'name': 'Поучаствовать в 10 рейдах', 'target': 10, 'coins': 400, 'xp': 300}
+}
+
+def check_and_reset_quests(user_id):
+    if user_id not in players or 'quests' not in players[user_id]:
+        return
+    
+    q_data = players[user_id]['quests']
+    current_time = time.time()
+    
+    if current_time >= q_data['daily_reset']:
+        q_data['daily_reset'] = current_time + 86400
+        q_data['daily_active'] = random.sample(list(DAILY_QUESTS_POOL.keys()), 3)
+        q_data['daily_progress'] = {q: 0 for q in q_data['daily_active']}
+        q_data['daily_claimed'] = {q: False for q in q_data['daily_active']}
+        
+    if current_time >= q_data['weekly_reset']:
+        q_data['weekly_reset'] = current_time + 604800
+        q_data['weekly_progress'] = {q: 0 for q in WEEKLY_QUESTS.keys()}
+        q_data['weekly_claimed'] = {q: False for q in WEEKLY_QUESTS.keys()}
+
+def progress_quest(user_id, q_type, amount=1):
+    if user_id not in players or 'quests' not in players[user_id]:
+        return
+    
+    check_and_reset_quests(user_id)
+    q_data = players[user_id]['quests']
+    
+    if q_type in q_data['daily_active']:
+        current = q_data['daily_progress'][q_type]
+        target = DAILY_QUESTS_POOL[q_type]['target']
+        if current < target:
+            q_data['daily_progress'][q_type] = min(target, current + amount)
+            
+    if q_type in WEEKLY_QUESTS:
+        current = q_data['weekly_progress'].get(q_type, 0)
+        target = WEEKLY_QUESTS[q_type]['target']
+        if current < target:
+            q_data['weekly_progress'][q_type] = min(target, current + amount)
+
 def init_user(user_id, name, username=None):
     if user_id not in players:
         players[user_id] = {
@@ -57,6 +110,25 @@ def init_user(user_id, name, username=None):
         for key, default in [('level', 1), ('xp', 0), ('coins', 0), ('wins', 0), ('losses', 0), ('up_dmg', 0), ('up_hp', 0)]:
             if key not in players[user_id]:
                 players[user_id][key] = default
+
+    if 'quests' not in players[user_id]:
+        players[user_id]['quests'] = {
+            'daily_reset': time.time() + 86400,
+            'weekly_reset': time.time() + 604800,
+            'daily_active': random.sample(list(DAILY_QUESTS_POOL.keys()), 3),
+            'daily_progress': {},
+            'daily_claimed': {},
+            'weekly_progress': {},
+            'weekly_claimed': {}
+        }
+        for q in players[user_id]['quests']['daily_active']:
+            players[user_id]['quests']['daily_progress'][q] = 0
+            players[user_id]['quests']['daily_claimed'][q] = False
+        for q in WEEKLY_QUESTS.keys():
+            players[user_id]['quests']['weekly_progress'][q] = 0
+            players[user_id]['quests']['weekly_claimed'][q] = False
+            
+    check_and_reset_quests(user_id)
 
 def add_xp_and_coins(user_id, xp_gain, coins_gain):
     p = players[user_id]
@@ -92,6 +164,7 @@ def get_main_menu():
         KeyboardButton("В бой!"),
         KeyboardButton("🦖 Рейд на Тирана"),
         KeyboardButton("⚡ Прокачка"),
+        KeyboardButton("📜 Квесты"),
         KeyboardButton("Инвентарь"),
         KeyboardButton("👤 Профиль"),
         KeyboardButton("🏆 Топ")
@@ -123,6 +196,49 @@ def get_inventory_menu(inventory):
         markup.add(KeyboardButton(f"Использовать: {item} ({count})"))
     markup.add(KeyboardButton("Назад"))
     return markup
+
+def generate_quests_ui(user_id):
+    check_and_reset_quests(user_id)
+    q_data = players[user_id]['quests']
+    
+    daily_tl = max(0, int(q_data['daily_reset'] - time.time()))
+    weekly_tl = max(0, int(q_data['weekly_reset'] - time.time()))
+    
+    d_h, d_m = divmod(daily_tl // 60, 60)
+    w_d, w_h = divmod(weekly_tl // 3600, 24)
+    
+    text = f"📜 <b>КВЕСТЫ</b>\n\n"
+    text += f"🌞 <b>Ежедневные</b> (Сброс через {d_h} ч. {d_m} мин.)\n"
+    
+    markup = InlineKeyboardMarkup(row_width=1)
+    
+    for idx, q_key in enumerate(q_data['daily_active'], 1):
+        q_info = DAILY_QUESTS_POOL[q_key]
+        prog = q_data['daily_progress'].get(q_key, 0)
+        claimed = q_data['daily_claimed'].get(q_key, False)
+        
+        status = "✅ Выполнено" if claimed else f"⏳ {prog}/{q_info['target']}"
+        text += f"{idx}. {q_info['name']}\n   Награда: {q_info['coins']} 💰 | {q_info['xp']} XP\n   Прогресс: {status}\n\n"
+        
+        if prog >= q_info['target'] and not claimed:
+            markup.add(InlineKeyboardButton(f"🎁 Награда: {q_info['name']}", callback_data=f"quest:daily:{q_key}"))
+
+    text += f"🗓️ <b>Еженедельные</b> (Сброс через {w_d} дн. {w_h} ч.)\n"
+    for idx, q_key in enumerate(WEEKLY_QUESTS.keys(), 1):
+        q_info = WEEKLY_QUESTS[q_key]
+        prog = q_data['weekly_progress'].get(q_key, 0)
+        claimed = q_data['weekly_claimed'].get(q_key, False)
+        
+        status = "✅ Выполнено" if claimed else f"⏳ {prog}/{q_info['target']}"
+        text += f"{idx}. {q_info['name']}\n   Награда: {q_info['coins']} 💰 | {q_info['xp']} XP\n   Прогресс: {status}\n\n"
+        
+        if prog >= q_info['target'] and not claimed:
+            short_name = q_info['name'][:20] + "..." if len(q_info['name']) > 20 else q_info['name']
+            markup.add(InlineKeyboardButton(f"🎁 Награда: {short_name}", callback_data=f"quest:weekly:{q_key}"))
+            
+    markup.add(InlineKeyboardButton("🔄 Обновить задания", callback_data="quest_refresh"))
+    
+    return text, markup
 
 def generate_leaderboard(lb_type='rank', page=1):
     all_players = list(players.values())
@@ -179,6 +295,10 @@ def end_battle(winner_id, loser_id):
     players[winner_id]['wins'] += 1
     players[loser_id]['losses'] += 1
 
+    progress_quest(winner_id, 'pvp_play', 1)
+    progress_quest(winner_id, 'pvp_win', 1)
+    progress_quest(loser_id, 'pvp_play', 1)
+
     leveled_up = add_xp_and_coins(winner_id, 10, 20)
 
     for uid in (winner_id, loser_id):
@@ -204,6 +324,56 @@ def start_game(message):
         f"Привет, {message.from_user.first_name}! Готов к сражениям?",
         reply_markup=get_main_menu()
     )
+
+@bot.message_handler(func=lambda message: message.text in ["📜 Квесты", "Квесты"])
+def show_quests_menu(message):
+    user_id = message.chat.id
+    init_user(user_id, message.from_user.first_name, message.from_user.username)
+    text, markup = generate_quests_ui(user_id)
+    bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("quest:"))
+def handle_quest_claim(call):
+    user_id = call.from_user.id
+    parts = call.data.split(":")
+    
+    if len(parts) == 3:
+        q_cat = parts[1]
+        q_key = parts[2]
+        
+        check_and_reset_quests(user_id)
+        q_data = players[user_id]['quests']
+        
+        if q_cat == 'daily' and q_key in q_data['daily_active']:
+            if q_data['daily_progress'].get(q_key, 0) >= DAILY_QUESTS_POOL[q_key]['target'] and not q_data['daily_claimed'].get(q_key, False):
+                q_data['daily_claimed'][q_key] = True
+                add_xp_and_coins(user_id, DAILY_QUESTS_POOL[q_key]['xp'], DAILY_QUESTS_POOL[q_key]['coins'])
+                bot.answer_callback_query(call.id, f"Награда получена! +{DAILY_QUESTS_POOL[q_key]['coins']} 💰, +{DAILY_QUESTS_POOL[q_key]['xp']} XP", show_alert=True)
+            else:
+                bot.answer_callback_query(call.id, "Квест еще не выполнен или уже собран!")
+        elif q_cat == 'weekly' and q_key in WEEKLY_QUESTS:
+            if q_data['weekly_progress'].get(q_key, 0) >= WEEKLY_QUESTS[q_key]['target'] and not q_data['weekly_claimed'].get(q_key, False):
+                q_data['weekly_claimed'][q_key] = True
+                add_xp_and_coins(user_id, WEEKLY_QUESTS[q_key]['xp'], WEEKLY_QUESTS[q_key]['coins'])
+                bot.answer_callback_query(call.id, f"Награда получена! +{WEEKLY_QUESTS[q_key]['coins']} 💰, +{WEEKLY_QUESTS[q_key]['xp']} XP", show_alert=True)
+            else:
+                bot.answer_callback_query(call.id, "Квест еще не выполнен или уже собран!")
+                
+    text, markup = generate_quests_ui(user_id)
+    try:
+        bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
+    except Exception:
+        pass
+
+@bot.callback_query_handler(func=lambda call: call.data == "quest_refresh")
+def handle_quest_refresh(call):
+    user_id = call.from_user.id
+    text, markup = generate_quests_ui(user_id)
+    try:
+        bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
+        bot.answer_callback_query(call.id, "Квесты обновлены!")
+    except Exception:
+        bot.answer_callback_query(call.id, "Нет новых изменений.")
 
 @bot.message_handler(func=lambda message: message.text in ["👤 Профиль", "Профиль"])
 def show_profile(message):
@@ -417,10 +587,18 @@ def start_raid_queue(message):
         if len(active_raid['participants']) < 5:
             active_raid['participants'].append(user_id)
             active_raid['damage'][user_id] = 0
-            bot.send_message(user_id, f"🦖 Вы присоединились к текущему рейду на Тирана! Участников: {len(active_raid['participants'])}/5.\nЗдоровье Тирана: {active_raid['boss_hp']}/{active_raid['max_hp']} HP", reply_markup=get_raid_menu())
+            
+            queue_text = f"🦖 Вы присоединились к текущему рейду на Тирана! Участников: {len(active_raid['participants'])}/5.\nЗдоровье Тирана: {active_raid['boss_hp']}/{active_raid['max_hp']} HP"
+            markup = InlineKeyboardMarkup()
+            markup.add(InlineKeyboardButton("🔄 Обновить", callback_data="raid_refresh"))
+            bot.send_message(user_id, queue_text, reply_markup=markup)
+
             for uid in active_raid['participants']:
                 if uid != user_id:
-                    bot.send_message(uid, f"👤 К текущему рейду присоединился новый участник! Всего игроков: {len(active_raid['participants'])}")
+                    try:
+                        bot.send_message(uid, f"👤 К текущему рейду присоединился новый участник! Всего игроков: {len(active_raid['participants'])}/5")
+                    except Exception:
+                        pass
             return
         else:
             bot.send_message(user_id, "Текущий рейд уже заполнен (максимум 5 участников). Ожидайте окончания боя.", reply_markup=get_main_menu())
@@ -432,10 +610,14 @@ def start_raid_queue(message):
 
     raid_queue.append(user_id)
     
-    markup = ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(KeyboardButton("❌ Прекратить поиск"))
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("🔄 Обновить", callback_data="queue_refresh"))
+    
+    reply_markup_kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    reply_markup_kb.add(KeyboardButton("❌ Прекратить поиск"))
 
-    bot.send_message(user_id, f"🦖 Вы встали в очередь на рейд против Тирана!\nУчастников в очереди: {len(raid_queue)}/3 (мин. для старта)", reply_markup=markup)
+    msg = bot.send_message(user_id, f"🦖 Вы встали в очередь на рейд против Тирана!\nУчастников в очереди: {len(raid_queue)} из 3 (мин. для старта)", reply_markup=reply_markup_kb)
+    bot.send_message(user_id, "Нажмите кнопку ниже, чтобы проверить количество участников:", reply_markup=markup)
 
     if len(raid_queue) >= 3:
         participants = raid_queue[:5] 
@@ -450,11 +632,50 @@ def start_raid_queue(message):
         }
 
         for uid in participants:
+            raid_markup = InlineKeyboardMarkup()
+            raid_markup.add(InlineKeyboardButton("🔄 Обновить", callback_data="raid_refresh"))
             bot.send_message(
                 uid,
                 f"🚨 РЕЙД НАЧАЛСЯ!\nБосс: Тиран (1000 HP)\nУчастников в группе: {len(participants)}\nВаш черед атаковать!",
-                reply_markup=get_raid_menu()
+                reply_markup=raid_markup
             )
+
+@bot.callback_query_handler(func=lambda call: call.data == "queue_refresh")
+def handle_queue_refresh(call):
+    user_id = call.from_user.id
+    if user_id in raid_queue:
+        count = len(raid_queue)
+        new_text = f"🦖 Вы в очереди на рейд против Тирана!\nУчастников в очереди: {count} из 3 (мин. для старта)"
+        try:
+            bot.edit_message_text(new_text, call.message.chat.id, call.message.message_id, reply_markup=call.message.reply_markup)
+        except Exception:
+            pass
+        bot.answer_callback_query(call.id, f"Обновлено! В очереди: {count} из 3")
+    else:
+        bot.answer_callback_query(call.id, "Вы не находитесь в очереди.", show_alert=True)
+
+@bot.callback_query_handler(func=lambda call: call.data == "raid_refresh")
+def handle_raid_refresh(call):
+    global active_raid
+    user_id = call.from_user.id
+    if active_raid is not None and user_id in active_raid['participants']:
+        current_turn_user = active_raid['participants'][active_raid['turn_index']]
+        is_my_turn = (current_turn_user == user_id)
+        turn_text = "Ваш черед атаковать!" if is_my_turn else "Ожидайте ход других участников."
+        
+        new_text = (
+            f"🚨 АКТИВНЫЙ РЕЙД НА ТИРАНА\n"
+            f"Здоровье Тирана: {active_raid['boss_hp']}/{active_raid['max_hp']} HP\n"
+            f"Участников в группе: {len(active_raid['participants'])}/5\n"
+            f"{turn_text}"
+        )
+        try:
+            bot.edit_message_text(new_text, call.message.chat.id, call.message.message_id, reply_markup=call.message.reply_markup)
+        except Exception:
+            pass
+        bot.answer_callback_query(call.id, "Статус рейда обновлен!")
+    else:
+        bot.answer_callback_query(call.id, "Активный рейд не найден.", show_alert=True)
 
 @bot.message_handler(func=lambda message: message.text == "❌ Прекратить поиск")
 def cancel_raid_queue(message):
@@ -488,7 +709,10 @@ def attack_tyrant(message):
     bot.send_message(user_id, f"💥 Вы нанесли Тирану {damage} урона!")
     for uid in current_participants:
         if uid != user_id:
-            bot.send_message(uid, f"⚔️ Участник нанес Тирану {damage} урона!")
+            try:
+                bot.send_message(uid, f"⚔️ Участник нанес Тирану {damage} урона!")
+            except Exception:
+                pass
 
     if active_raid['boss_hp'] <= 0:
         sorted_dmg = sorted(active_raid['damage'].items(), key=lambda x: x[1], reverse=True)
@@ -504,6 +728,16 @@ def attack_tyrant(message):
         current_time = time.time()
 
         for idx, (uid, dmg) in enumerate(sorted_dmg):
+            progress_quest(uid, 'raid_play', 1)
+            progress_quest(uid, 'wk_raid_3', 1)
+            progress_quest(uid, 'wk_raid_5', 1)
+            progress_quest(uid, 'wk_raid_10', 1)
+            progress_quest(uid, 'wk_dmg_500', dmg)
+            progress_quest(uid, 'wk_dmg_1000', dmg)
+            
+            if idx < 2:
+                progress_quest(uid, 'raid_top', 1)
+
             coins, xp = rewards[idx] if idx < len(rewards) else (5, 5)
             leveled_up = add_xp_and_coins(uid, xp, coins)
             
@@ -516,7 +750,10 @@ def attack_tyrant(message):
                 new_rank = RANKS.get(new_lvl, "Абсолют")
                 msg += f"\n🎉 ПОЗДРАВЛЯЕМ! Повышен уровень до {new_lvl} ({new_rank})!"
             
-            bot.send_message(uid, msg, reply_markup=get_main_menu())
+            try:
+                bot.send_message(uid, msg, reply_markup=get_main_menu())
+            except Exception:
+                pass
 
         active_raid = None
         return
@@ -524,8 +761,14 @@ def attack_tyrant(message):
     active_raid['turn_index'] = (active_raid['turn_index'] + 1) % len(current_participants)
     next_user_id = current_participants[active_raid['turn_index']]
 
+    raid_markup = InlineKeyboardMarkup()
+    raid_markup.add(InlineKeyboardButton("🔄 Обновить", callback_data="raid_refresh"))
+
     bot.send_message(user_id, f"Здоровье Тирана: {active_raid['boss_hp']}/{active_raid['max_hp']} HP. Ожидайте следующий ход.")
-    bot.send_message(next_user_id, f"🚨 Ваш ход атаковать Тирана! (Здоровье босса: {active_raid['boss_hp']}/{active_raid['max_hp']} HP)")
+    try:
+        bot.send_message(next_user_id, f"🚨 Ваш ход атаковать Тирана! (Здоровье босса: {active_raid['boss_hp']}/{active_raid['max_hp']} HP)", reply_markup=raid_markup)
+    except Exception:
+        pass
 
 @bot.message_handler(func=lambda message: message.text == "Атака")
 def attack(message):
@@ -594,6 +837,10 @@ def surrender(message):
     players[opponent_id]['wins'] += 1
     players[user_id]['losses'] += 1
 
+    progress_quest(opponent_id, 'pvp_play', 1)
+    progress_quest(opponent_id, 'pvp_win', 1)
+    progress_quest(user_id, 'pvp_play', 1)
+
     leveled_up = add_xp_and_coins(opponent_id, 10, 20)
 
     for uid in (user_id, opponent_id):
@@ -659,6 +906,8 @@ def use_item(message):
             items.remove(item_name)
             heal_amount = 40
             players[user_id]['hp'] = min(players[user_id]['max_hp'], players[user_id]['hp'] + heal_amount)
+            
+            progress_quest(user_id, 'potion_use', 1)
 
             bot.send_message(user_id, f"Вы использовали Зелье лечения и восстановили {heal_amount} HP!\nТекущее здоровье: {players[user_id]['hp']}/{players[user_id]['max_hp']}")
 
