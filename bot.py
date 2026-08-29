@@ -12,6 +12,10 @@ bot = telebot.TeleBot(TOKEN)
 players = {}
 queue = []
 
+raid_queue = []          
+active_raid = None       
+raid_cooldowns = {}      
+
 RANKS = {
     1: "Новичок",
     2: "Ученик",
@@ -24,6 +28,8 @@ RANKS = {
     9: "Дракон",
     10: "Абсолют"
 }
+
+MAX_UPGRADE_LEVEL = 10
 
 def init_user(user_id, name, username=None):
     if user_id not in players:
@@ -40,19 +46,22 @@ def init_user(user_id, name, username=None):
             'xp': 0,
             'coins': 0,
             'wins': 0,
-            'losses': 0
+            'losses': 0,
+            'up_dmg': 0,    
+            'up_hp': 0      
         }
     else:
         players[user_id]['name'] = name
         if username:
             players[user_id]['username'] = username
-        for key, default in [('level', 1), ('xp', 0), ('coins', 0), ('wins', 0), ('losses', 0)]:
+        for key, default in [('level', 1), ('xp', 0), ('coins', 0), ('wins', 0), ('losses', 0), ('up_dmg', 0), ('up_hp', 0)]:
             if key not in players[user_id]:
                 players[user_id][key] = default
 
 def add_xp_and_coins(user_id, xp_gain, coins_gain):
     p = players[user_id]
     p['coins'] += coins_gain
+
     if p['level'] >= 10:
         p['xp'] = 100
         return False
@@ -62,7 +71,8 @@ def add_xp_and_coins(user_id, xp_gain, coins_gain):
     while p['xp'] >= 100 and p['level'] < 10:
         p['xp'] -= 100
         p['level'] += 1
-        p['max_hp'] += 10
+        p['max_hp'] += 10 + (p['up_hp'] * 5)
+        p['hp'] = p['max_hp']
         leveled_up = True
 
     if p['level'] == 10 and p['xp'] > 100:
@@ -80,6 +90,8 @@ def get_main_menu():
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add(
         KeyboardButton("В бой!"),
+        KeyboardButton("🦖 Рейд на Тирана"),
+        KeyboardButton("⚡ Прокачка"),
         KeyboardButton("Инвентарь"),
         KeyboardButton("👤 Профиль"),
         KeyboardButton("🏆 Топ")
@@ -96,6 +108,14 @@ def get_battle_menu():
     )
     return markup
 
+def get_raid_menu():
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup.add(
+        KeyboardButton("⚔️ Ударить Тирана"),
+        KeyboardButton("Инвентарь")
+    )
+    return markup
+
 def get_inventory_menu(inventory):
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
     for item in set(inventory):
@@ -108,10 +128,10 @@ def generate_leaderboard(lb_type='rank', page=1):
     all_players = list(players.values())
     if lb_type == 'rank':
         sorted_p = sorted(all_players, key=lambda x: (x['level'], x['xp'], x['wins']), reverse=True)
-        title = "🏆 **Таблица лидеров по рангу**\n\n"
+        title = "🏆 Таблица лидеров по рангу\n\n"
     else:
         sorted_p = sorted(all_players, key=lambda x: (x['wins'], x['level']), reverse=True)
-        title = "⚔️ **Таблица лидеров по победам**\n\n"
+        title = "⚔️ Таблица лидеров по победам\n\n"
 
     per_page = 5
     total_players = len(sorted_p)
@@ -167,14 +187,14 @@ def end_battle(winner_id, loser_id):
         players[uid]['is_defending'] = False
         players[uid]['is_turn'] = False
 
-    win_msg = "🏆 **Вы победили!**\nНаграда: +10 XP, +20 монет 💰\nЗдоровье восстановлено."
+    win_msg = "🏆 Вы победили!\nНаграда: +10 XP, +20 монет 💰\nЗдоровье восстановлено."
     if leveled_up:
         new_lvl = players[winner_id]['level']
         new_rank = RANKS.get(new_lvl, "Абсолют")
-        win_msg += f"\n\n🎉 **ПОЗДРАВЛЯЕМ!** Вы повысили уровень до {new_lvl} ({new_rank})!"
+        win_msg += f"\n\n🎉 ПОЗДРАВЛЯЕМ! Вы повысили уровень до {new_lvl} ({new_rank})!"
 
-    bot.send_message(winner_id, win_msg, reply_markup=get_main_menu(), parse_mode="Markdown")
-    bot.send_message(loser_id, "☠️ **Вы проиграли!**\nЗдоровье восстановлено.", reply_markup=get_main_menu(), parse_mode="Markdown")
+    bot.send_message(winner_id, win_msg, reply_markup=get_main_menu())
+    bot.send_message(loser_id, "☠️ Вы проиграли!\nЗдоровье восстановлено.", reply_markup=get_main_menu())
 
 @bot.message_handler(commands=['start'])
 def start_game(message):
@@ -206,6 +226,8 @@ def show_profile(message):
     profile_text = (
         f"Игрок: {username_str}\n"
         f"Ранг: 🔥 {rank_name} ({p['level']} уровень)\n"
+        f"Макс. HP: {p['max_hp']} (Улучшений: {p['up_hp']}/{MAX_UPGRADE_LEVEL})\n"
+        f"Сила атаки бонус: +{p['up_dmg'] * 3} (Улучшений: {p['up_dmg']}/{MAX_UPGRADE_LEVEL})\n"
         f"Монеты: 💰 {p['coins']}\n"
         f"Победы: {p['wins']} | Поражения: {p['losses']}\n"
         f"Опыт: {xp_str}\n"
@@ -215,12 +237,113 @@ def show_profile(message):
 
     bot.send_message(user_id, profile_text, reply_markup=get_main_menu())
 
+@bot.message_handler(func=lambda message: message.text and "Прокачка" in message.text)
+def show_upgrades(message):
+    user_id = message.chat.id
+    init_user(user_id, message.from_user.first_name, message.from_user.username)
+    p = players[user_id]
+
+    text = f"⚡ Меню прокачки характеристик\nУ вас монет: 💰 {p['coins']}\n\n"
+    
+    if p['up_dmg'] >= MAX_UPGRADE_LEVEL:
+        text += f"1. 💪 Сила удара (Уровень: {p['up_dmg']}/{MAX_UPGRADE_LEVEL} - MAX)\n"
+        text += "   Увеличивает урон в боях и рейдах.\n\n"
+    else:
+        cost_dmg = (p['up_dmg'] + 1) * 25
+        text += f"1. 💪 Сила удара (Уровень: {p['up_dmg']}/{MAX_UPGRADE_LEVEL})\n"
+        text += "   Увеличивает урон в боях и рейдах.\n"
+        text += f"   Цена апгрейда: {cost_dmg} монет\n\n"
+
+    if p['up_hp'] >= MAX_UPGRADE_LEVEL:
+        text += f"2. 🛡️ Закалка здоровья (Уровень: {p['up_hp']}/{MAX_UPGRADE_LEVEL} - MAX)\n"
+        text += "   Увеличивает максимальное HP (+15 за уровень).\n"
+    else:
+        cost_hp = (p['up_hp'] + 1) * 20
+        text += f"2. 🛡️ Закалка здоровья (Уровень: {p['up_hp']}/{MAX_UPGRADE_LEVEL})\n"
+        text += "   Увеличивает максимальное HP (+15 за уровень).\n"
+        text += f"   Цена апгрейда: {cost_hp} монет\n"
+
+    markup = InlineKeyboardMarkup(row_width=1)
+    
+    if p['up_dmg'] < MAX_UPGRADE_LEVEL:
+        markup.add(InlineKeyboardButton(f"💪 Улучшить урон ({(p['up_dmg'] + 1) * 25} 💰)", callback_data="up:dmg"))
+    if p['up_hp'] < MAX_UPGRADE_LEVEL:
+        markup.add(InlineKeyboardButton(f"🛡️ Улучшить HP ({(p['up_hp'] + 1) * 20} 💰)", callback_data="up:hp"))
+
+    bot.send_message(user_id, text, reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("up:"))
+def handle_upgrade_callback(call):
+    user_id = call.from_user.id
+    init_user(user_id, call.from_user.first_name, call.from_user.username)
+    p = players[user_id]
+    action = call.data.split(":")[1]
+
+    if action == "dmg":
+        if p['up_dmg'] >= MAX_UPGRADE_LEVEL:
+            bot.answer_callback_query(call.id, "Достигнут максимальный уровень!", show_alert=True)
+        else:
+            cost = (p['up_dmg'] + 1) * 25
+            if p['coins'] >= cost:
+                p['coins'] -= cost
+                p['up_dmg'] += 1
+                bot.answer_callback_query(call.id, f"Успешно! Сила удара повышена (Ур. {p['up_dmg']})")
+            else:
+                bot.answer_callback_query(call.id, "Не хватает монет!", show_alert=True)
+                return
+    elif action == "hp":
+        if p['up_hp'] >= MAX_UPGRADE_LEVEL:
+            bot.answer_callback_query(call.id, "Достигнут максимальный уровень!", show_alert=True)
+        else:
+            cost = (p['up_hp'] + 1) * 20
+            if p['coins'] >= cost:
+                p['coins'] -= cost
+                p['up_hp'] += 1
+                p['max_hp'] += 15
+                p['hp'] = min(p['max_hp'], p['hp'] + 15)
+                bot.answer_callback_query(call.id, f"Успешно! Здоровье повышено (Ур. {p['up_hp']})")
+            else:
+                bot.answer_callback_query(call.id, "Не хватает монет!", show_alert=True)
+                return
+
+    text = f"⚡ Меню прокачки характеристик\nУ вас монет: 💰 {p['coins']}\n\n"
+    
+    if p['up_dmg'] >= MAX_UPGRADE_LEVEL:
+        text += f"1. 💪 Сила удара (Уровень: {p['up_dmg']}/{MAX_UPGRADE_LEVEL} - MAX)\n"
+        text += "   Увеличивает урон в боях и рейдах.\n\n"
+    else:
+        cost_dmg = (p['up_dmg'] + 1) * 25
+        text += f"1. 💪 Сила удара (Уровень: {p['up_dmg']}/{MAX_UPGRADE_LEVEL})\n"
+        text += "   Увеличивает урон в боях и рейдах.\n"
+        text += f"   Цена апгрейда: {cost_dmg} монет\n\n"
+
+    if p['up_hp'] >= MAX_UPGRADE_LEVEL:
+        text += f"2. 🛡️ Закалка здоровья (Уровень: {p['up_hp']}/{MAX_UPGRADE_LEVEL} - MAX)\n"
+        text += "   Увеличивает максимальное HP (+15 за уровень).\n"
+    else:
+        cost_hp = (p['up_hp'] + 1) * 20
+        text += f"2. 🛡️ Закалка здоровья (Уровень: {p['up_hp']}/{MAX_UPGRADE_LEVEL})\n"
+        text += "   Увеличивает максимальное HP (+15 за уровень).\n"
+        text += f"   Цена апгрейда: {cost_hp} монет\n"
+
+    markup = InlineKeyboardMarkup(row_width=1)
+    
+    if p['up_dmg'] < MAX_UPGRADE_LEVEL:
+        markup.add(InlineKeyboardButton(f"💪 Улучшить урон ({(p['up_dmg'] + 1) * 25} 💰)", callback_data="up:dmg"))
+    if p['up_hp'] < MAX_UPGRADE_LEVEL:
+        markup.add(InlineKeyboardButton(f"🛡️ Улучшить HP ({(p['up_hp'] + 1) * 20} 💰)", callback_data="up:hp"))
+
+    try:
+        bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup)
+    except Exception:
+        pass
+
 @bot.message_handler(func=lambda message: message.text in ["🏆 Топ", "Топ"])
 def show_top(message):
     user_id = message.chat.id
     init_user(user_id, message.from_user.first_name, message.from_user.username)
     text, markup = generate_leaderboard('rank', 1)
-    bot.send_message(user_id, text, reply_markup=markup, parse_mode="Markdown")
+    bot.send_message(user_id, text, reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("top:"))
 def handle_top_callback(call):
@@ -229,7 +352,7 @@ def handle_top_callback(call):
     page = int(parts[2])
     text, markup = generate_leaderboard(lb_type, page)
     try:
-        bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+        bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup)
     except Exception:
         pass
     bot.answer_callback_query(call.id)
@@ -271,6 +394,139 @@ def search_opponent(message):
         queue.append(user_id)
         bot.send_message(user_id, "Поиск противника... Ожидайте.")
 
+@bot.message_handler(func=lambda message: message.text == "🦖 Рейд на Тирана")
+def start_raid_queue(message):
+    user_id = message.chat.id
+    init_user(user_id, message.from_user.first_name, message.from_user.username)
+
+    if user_id in raid_cooldowns:
+        timeLeft = raid_cooldowns[user_id] - time.time()
+        if timeLeft > 0:
+            mins = int(timeLeft // 60)
+            secs = int(timeLeft % 60)
+            bot.send_message(user_id, f"⏳ Вы на кулдауне после прошлого рейда! Подождите еще {mins} мин. {secs} сек.", reply_markup=get_main_menu())
+            return
+        else:
+            del raid_cooldowns[user_id]
+
+    global active_raid
+    if active_raid is not None:
+        if user_id in active_raid['participants']:
+            bot.send_message(user_id, "Вы уже участвуете в текущем рейде на Тирана!", reply_markup=get_raid_menu())
+            return
+        if len(active_raid['participants']) < 5:
+            active_raid['participants'].append(user_id)
+            active_raid['damage'][user_id] = 0
+            bot.send_message(user_id, f"🦖 Вы присоединились к текущему рейду на Тирана! Участников: {len(active_raid['participants'])}/5.\nЗдоровье Тирана: {active_raid['boss_hp']}/{active_raid['max_hp']} HP", reply_markup=get_raid_menu())
+            for uid in active_raid['participants']:
+                if uid != user_id:
+                    bot.send_message(uid, f"👤 К текущему рейду присоединился новый участник! Всего игроков: {len(active_raid['participants'])}")
+            return
+        else:
+            bot.send_message(user_id, "Текущий рейд уже заполнен (максимум 5 участников). Ожидайте окончания боя.", reply_markup=get_main_menu())
+            return
+
+    if user_id in raid_queue:
+        bot.send_message(user_id, "Вы уже в очереди на рейд. Ожидайте набора участников...")
+        return
+
+    raid_queue.append(user_id)
+    
+    markup = ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add(KeyboardButton("❌ Прекратить поиск"))
+
+    bot.send_message(user_id, f"🦖 Вы встали в очередь на рейд против Тирана!\nУчастников в очереди: {len(raid_queue)}/3 (мин. для старта)", reply_markup=markup)
+
+    if len(raid_queue) >= 3:
+        participants = raid_queue[:5] 
+        del raid_queue[:len(participants)]
+
+        active_raid = {
+            'boss_hp': 1000,
+            'max_hp': 1000,
+            'participants': participants,
+            'damage': {uid: 0 for uid in participants},
+            'turn_index': 0
+        }
+
+        for uid in participants:
+            bot.send_message(
+                uid,
+                f"🚨 РЕЙД НАЧАЛСЯ!\nБосс: Тиран (1000 HP)\nУчастников в группе: {len(participants)}\nВаш черед атаковать!",
+                reply_markup=get_raid_menu()
+            )
+
+@bot.message_handler(func=lambda message: message.text == "❌ Прекратить поиск")
+def cancel_raid_queue(message):
+    user_id = message.chat.id
+    if user_id in raid_queue:
+        raid_queue.remove(user_id)
+        bot.send_message(user_id, "❌ Вы вышли из очереди поиска рейда.", reply_markup=get_main_menu())
+    else:
+        bot.send_message(user_id, "Вы не находитесь в очереди на рейд.", reply_markup=get_main_menu())
+
+@bot.message_handler(func=lambda message: message.text == "⚔️ Ударить Тирана")
+def attack_tyrant(message):
+    global active_raid
+    user_id = message.chat.id
+
+    if active_raid is None or user_id not in active_raid['participants']:
+        bot.send_message(user_id, "Вы сейчас не участвуете в активном рейде.", reply_markup=get_main_menu())
+        return
+
+    current_participants = active_raid['participants']
+    if current_participants[active_raid['turn_index']] != user_id:
+        bot.send_message(user_id, "⏳ Сейчас не ваша очередь бить Тирана! Ожидайте ход других участников.")
+        return
+
+    base_dmg = random.randint(30, 60)
+    damage = base_dmg + (players[user_id]['up_dmg'] * 3)
+    
+    active_raid['boss_hp'] -= damage
+    active_raid['damage'][user_id] += damage
+
+    bot.send_message(user_id, f"💥 Вы нанесли Тирану {damage} урона!")
+    for uid in current_participants:
+        if uid != user_id:
+            bot.send_message(uid, f"⚔️ Участник нанес Тирану {damage} урона!")
+
+    if active_raid['boss_hp'] <= 0:
+        sorted_dmg = sorted(active_raid['damage'].items(), key=lambda x: x[1], reverse=True)
+        
+        rewards = [
+            (100, 100), 
+            (50, 50),   
+            (30, 30),   
+            (10, 10),   
+            (10, 10)    
+        ]
+
+        current_time = time.time()
+
+        for idx, (uid, dmg) in enumerate(sorted_dmg):
+            coins, xp = rewards[idx] if idx < len(rewards) else (5, 5)
+            leveled_up = add_xp_and_coins(uid, xp, coins)
+            
+            raid_cooldowns[uid] = current_time + 600
+
+            place_str = f"{idx + 1} место"
+            msg = f"🎉 ТИРАН ПОВЕРЖЕН!\nВы заняли {place_str} по урону ({dmg} урона).\nНаграда: +{coins} монет 💰, +{xp} XP!"
+            if leveled_up:
+                new_lvl = players[uid]['level']
+                new_rank = RANKS.get(new_lvl, "Абсолют")
+                msg += f"\n🎉 ПОЗДРАВЛЯЕМ! Повышен уровень до {new_lvl} ({new_rank})!"
+            
+            bot.send_message(uid, msg, reply_markup=get_main_menu())
+
+        active_raid = None
+        return
+
+    active_raid['turn_index'] = (active_raid['turn_index'] + 1) % len(current_participants)
+    next_user_id = current_participants[active_raid['turn_index']]
+
+    bot.send_message(user_id, f"Здоровье Тирана: {active_raid['boss_hp']}/{active_raid['max_hp']} HP. Ожидайте следующий ход.")
+    bot.send_message(next_user_id, f"🚨 Ваш ход атаковать Тирана! (Здоровье босса: {active_raid['boss_hp']}/{active_raid['max_hp']} HP)")
+
 @bot.message_handler(func=lambda message: message.text == "Атака")
 def attack(message):
     user_id = message.chat.id
@@ -283,7 +539,9 @@ def attack(message):
         return
 
     opponent_id = players[user_id]['opponent']
-    damage = random.randint(15, 25)
+    
+    base_dmg = random.randint(15, 25)
+    damage = base_dmg + (players[user_id]['up_dmg'] * 2)
 
     if players[opponent_id]['is_defending']:
         damage = damage // 2
@@ -344,14 +602,14 @@ def surrender(message):
         players[uid]['is_defending'] = False
         players[uid]['is_turn'] = False
 
-    win_msg = "🏆 **Противник сдался! Вы победили!**\nНаграда: +10 XP, +20 монет 💰\nЗдоровье восстановлено."
+    win_msg = "🏆 Противник сдался! Вы победили!\nНаграда: +10 XP, +20 монет 💰\nЗдоровье восстановлено."
     if leveled_up:
         new_lvl = players[opponent_id]['level']
         new_rank = RANKS.get(new_lvl, "Абсолют")
-        win_msg += f"\n\n🎉 **ПОЗДРАВЛЯЕМ!** Вы повысили уровень до {new_lvl} ({new_rank})!"
+        win_msg += f"\n\n🎉 ПОЗДРАВЛЯЕМ! Вы повысили уровень до {new_lvl} ({new_rank})!"
 
-    bot.send_message(opponent_id, win_msg, reply_markup=get_main_menu(), parse_mode="Markdown")
-    bot.send_message(user_id, "🏳️ **Вы сдались!** Засчитано поражение.\nЗдоровье восстановлено.", reply_markup=get_main_menu(), parse_mode="Markdown")
+    bot.send_message(opponent_id, win_msg, reply_markup=get_main_menu())
+    bot.send_message(user_id, "🏳️ Вы сдались! Засчитано поражение.\nЗдоровье восстановлено.", reply_markup=get_main_menu())
 
 @bot.message_handler(func=lambda message: message.text == "Инвентарь")
 def inventory(message):
@@ -378,6 +636,8 @@ def back_to_menu(message):
     init_user(user_id, message.from_user.first_name, message.from_user.username)
     if players[user_id]['opponent'] is not None:
         bot.send_message(user_id, "Вы вернулись в меню боя:", reply_markup=get_battle_menu())
+    elif active_raid is not None and user_id in active_raid['participants']:
+        bot.send_message(user_id, "Вы в активном рейде:", reply_markup=get_raid_menu())
     else:
         bot.send_message(user_id, "Главное меню:", reply_markup=get_main_menu())
 
