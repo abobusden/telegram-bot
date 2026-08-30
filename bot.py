@@ -1,20 +1,24 @@
 import os
-import telebot
-from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-import random
+import json
 import time
+import random
 from threading import Thread
 from flask import Flask
+import telebot
+from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
 TOKEN = "8609399059:AAH1VPl7e9LLPb3zIQ4g7sCtD8yZPtK12-c"
 bot = telebot.TeleBot(TOKEN)
 
+DATA_FILE = "players.json"
+MOVE_TIMEOUT = 30
+
 players = {}
 queue = []
-
 raid_queue = []          
 active_raid = None       
 raid_cooldowns = {}      
+battle_timers = {}
 
 RANKS = {
     1: "Новичок",
@@ -47,23 +51,86 @@ WEEKLY_QUESTS = {
     'wk_raid_10': {'name': 'Поучаствовать в 10 рейдах', 'target': 10, 'coins': 400, 'xp': 300}
 }
 
+TOWER_ENEMIES = {
+    1: {'name': 'Слизневик', 'hp': 60, 'dmg': (10, 15), 'coins': 15, 'xp': 10},
+    2: {'name': 'Гоблин-воин', 'hp': 90, 'dmg': (15, 20), 'coins': 25, 'xp': 15},
+    3: {'name': 'Орк-берсерк', 'hp': 130, 'dmg': (20, 25), 'coins': 40, 'xp': 25},
+    4: {'name': 'Скелет-рыцарь', 'hp': 180, 'dmg': (25, 30), 'coins': 60, 'xp': 35},
+    5: {'name': 'Тролль', 'hp': 250, 'dmg': (30, 40), 'coins': 80, 'xp': 50},
+    6: {'name': 'Темный маг', 'hp': 300, 'dmg': (40, 50), 'coins': 100, 'xp': 60},
+    7: {'name': 'Вампир', 'hp': 400, 'dmg': (45, 55), 'coins': 130, 'xp': 75},
+    8: {'name': 'Голем', 'hp': 550, 'dmg': (50, 65), 'coins': 160, 'xp': 90},
+    9: {'name': 'Демон', 'hp': 750, 'dmg': (60, 75), 'coins': 200, 'xp': 120},
+    10: {'name': 'Владыка Бездны', 'hp': 1000, 'dmg': (70, 90), 'coins': 300, 'xp': 200}
+}
+
+def save_players_data():
+    try:
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(players, f, ensure_ascii=False, indent=4)
+    except Exception:
+        pass
+
+def load_players_data():
+    global players
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                raw_data = json.load(f)
+                players = {int(k): v for k, v in raw_data.items()}
+                for uid in players:
+                    players[uid]['opponent'] = None
+                    players[uid]['in_tower'] = False
+                    players[uid]['is_defending'] = False
+                    players[uid]['is_turn'] = False
+        except Exception:
+            players = {}
+
+load_players_data()
+
+def reset_inactivity_timer(user_id):
+    battle_timers[user_id] = time.time()
+
+def check_inactivity_loop():
+    while True:
+        time.sleep(5)
+        current_time = time.time()
+        for uid in list(players.keys()):
+            p = players.get(uid)
+            if p and p.get('opponent') is not None and p.get('is_turn'):
+                last_move = battle_timers.get(uid, current_time)
+                if current_time - last_move > MOVE_TIMEOUT:
+                    opponent_id = p['opponent']
+                    bot.send_message(uid, "⏱️ Вы слишком долго думали и пропустили время хода! Засчитано поражение по таймауту.", reply_markup=get_main_menu())
+                    bot.send_message(opponent_id, "⏱️ Противник превысил лимит времени на ход! Вам присуждена победа!", reply_markup=get_main_menu())
+                    end_battle(winner_id=opponent_id, loser_id=uid)
+
+t_inactivity = Thread(target=check_inactivity_loop, daemon=True)
+t_inactivity.start()
+
 def check_and_reset_quests(user_id):
     if user_id not in players or 'quests' not in players[user_id]:
         return
     
     q_data = players[user_id]['quests']
     current_time = time.time()
+    changed = False
     
     if current_time >= q_data['daily_reset']:
         q_data['daily_reset'] = current_time + 86400
         q_data['daily_active'] = random.sample(list(DAILY_QUESTS_POOL.keys()), 3)
         q_data['daily_progress'] = {q: 0 for q in q_data['daily_active']}
         q_data['daily_claimed'] = {q: False for q in q_data['daily_active']}
+        changed = True
         
     if current_time >= q_data['weekly_reset']:
         q_data['weekly_reset'] = current_time + 604800
         q_data['weekly_progress'] = {q: 0 for q in WEEKLY_QUESTS.keys()}
         q_data['weekly_claimed'] = {q: False for q in WEEKLY_QUESTS.keys()}
+        changed = True
+
+    if changed:
+        save_players_data()
 
 def progress_quest(user_id, q_type, amount=1):
     if user_id not in players or 'quests' not in players[user_id]:
@@ -71,18 +138,24 @@ def progress_quest(user_id, q_type, amount=1):
     
     check_and_reset_quests(user_id)
     q_data = players[user_id]['quests']
+    changed = False
     
     if q_type in q_data['daily_active']:
         current = q_data['daily_progress'][q_type]
         target = DAILY_QUESTS_POOL[q_type]['target']
         if current < target:
             q_data['daily_progress'][q_type] = min(target, current + amount)
+            changed = True
             
     if q_type in WEEKLY_QUESTS:
         current = q_data['weekly_progress'].get(q_type, 0)
         target = WEEKLY_QUESTS[q_type]['target']
         if current < target:
             q_data['weekly_progress'][q_type] = min(target, current + amount)
+            changed = True
+
+    if changed:
+        save_players_data()
 
 def init_user(user_id, name, username=None):
     if user_id not in players:
@@ -101,13 +174,16 @@ def init_user(user_id, name, username=None):
             'wins': 0,
             'losses': 0,
             'up_dmg': 0,    
-            'up_hp': 0      
+            'up_hp': 0,
+            'tower_floor': 1,
+            'in_tower': False,
+            'tower_enemy_hp': 0
         }
     else:
         players[user_id]['name'] = name
         if username:
             players[user_id]['username'] = username
-        for key, default in [('level', 1), ('xp', 0), ('coins', 0), ('wins', 0), ('losses', 0), ('up_dmg', 0), ('up_hp', 0)]:
+        for key, default in [('level', 1), ('xp', 0), ('coins', 0), ('wins', 0), ('losses', 0), ('up_dmg', 0), ('up_hp', 0), ('tower_floor', 1), ('in_tower', False), ('tower_enemy_hp', 0)]:
             if key not in players[user_id]:
                 players[user_id][key] = default
 
@@ -129,6 +205,7 @@ def init_user(user_id, name, username=None):
             players[user_id]['quests']['weekly_claimed'][q] = False
             
     check_and_reset_quests(user_id)
+    save_players_data()
 
 def add_xp_and_coins(user_id, xp_gain, coins_gain):
     p = players[user_id]
@@ -136,6 +213,7 @@ def add_xp_and_coins(user_id, xp_gain, coins_gain):
 
     if p['level'] >= 10:
         p['xp'] = 100
+        save_players_data()
         return False
 
     p['xp'] += xp_gain
@@ -150,6 +228,7 @@ def add_xp_and_coins(user_id, xp_gain, coins_gain):
     if p['level'] == 10 and p['xp'] > 100:
         p['xp'] = 100
 
+    save_players_data()
     return leveled_up
 
 def get_progress_bar(xp):
@@ -163,6 +242,7 @@ def get_main_menu():
     markup.add(
         KeyboardButton("В бой!"),
         KeyboardButton("🦖 Рейд на Тирана"),
+        KeyboardButton("🗼 Башня"),
         KeyboardButton("⚡ Прокачка"),
         KeyboardButton("📜 Квесты"),
         KeyboardButton("Инвентарь"),
@@ -306,6 +386,9 @@ def end_battle(winner_id, loser_id):
         players[uid]['hp'] = players[uid]['max_hp']
         players[uid]['is_defending'] = False
         players[uid]['is_turn'] = False
+        battle_timers.pop(uid, None)
+
+    save_players_data()
 
     win_msg = "🏆 Вы победили!\nНаграда: +10 XP, +20 монет 💰\nЗдоровье восстановлено."
     if leveled_up:
@@ -400,6 +483,7 @@ def show_profile(message):
         f"Сила атаки бонус: +{p['up_dmg'] * 3} (Улучшений: {p['up_dmg']}/{MAX_UPGRADE_LEVEL})\n"
         f"Монеты: 💰 {p['coins']}\n"
         f"Победы: {p['wins']} | Поражения: {p['losses']}\n"
+        f"Текущий этаж Башни: 🗼 {p['tower_floor']}\n"
         f"Опыт: {xp_str}\n"
         f"Прогресс: {progress_str}\n"
         f"До следующего ранга: {left_str}"
@@ -457,6 +541,7 @@ def handle_upgrade_callback(call):
             if p['coins'] >= cost:
                 p['coins'] -= cost
                 p['up_dmg'] += 1
+                save_players_data()
                 bot.answer_callback_query(call.id, f"Успешно! Сила удара повышена (Ур. {p['up_dmg']})")
             else:
                 bot.answer_callback_query(call.id, "Не хватает монет!", show_alert=True)
@@ -471,6 +556,7 @@ def handle_upgrade_callback(call):
                 p['up_hp'] += 1
                 p['max_hp'] += 15
                 p['hp'] = min(p['max_hp'], p['hp'] + 15)
+                save_players_data()
                 bot.answer_callback_query(call.id, f"Успешно! Здоровье повышено (Ур. {p['up_hp']})")
             else:
                 bot.answer_callback_query(call.id, "Не хватает монет!", show_alert=True)
@@ -531,10 +617,62 @@ def handle_top_callback(call):
 def handle_ignore_callback(call):
     bot.answer_callback_query(call.id)
 
+@bot.message_handler(func=lambda message: message.text in ["🗼 Башня", "Башня"])
+def enter_tower(message):
+    user_id = message.chat.id
+    init_user(user_id, message.from_user.first_name, message.from_user.username)
+    
+    floor = players[user_id]['tower_floor']
+    if floor > len(TOWER_ENEMIES):
+        bot.send_message(user_id, "🏆 Вы прошли все этажи Башни испытаний! Поздравляем!", reply_markup=get_main_menu())
+        return
+        
+    enemy = TOWER_ENEMIES[floor]
+    
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup.add(
+        KeyboardButton("⚔️ Штурмовать этаж"),
+        KeyboardButton("Назад")
+    )
+    
+    text = (
+        f"🗼 <b>БАШНЯ ИСПЫТАНИЙ</b>\n\n"
+        f"Текущий этаж: {floor} из {len(TOWER_ENEMIES)}\n"
+        f"Противник: <b>{enemy['name']}</b>\n"
+        f"❤️ Здоровье: {enemy['hp']}\n"
+        f"⚔️ Урон: {enemy['dmg'][0]}-{enemy['dmg'][1]}\n\n"
+        f"Награда за победу: {enemy['coins']} 💰 | {enemy['xp']} XP"
+    )
+    bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
+
+@bot.message_handler(func=lambda message: message.text == "⚔️ Штурмовать этаж")
+def start_tower_battle(message):
+    user_id = message.chat.id
+    init_user(user_id, message.from_user.first_name, message.from_user.username)
+    
+    if players[user_id]['opponent'] is not None or user_id in raid_queue:
+        bot.send_message(user_id, "Вы не можете начать этаж, пока ищете другой бой или в очереди на рейд.")
+        return
+        
+    floor = players[user_id]['tower_floor']
+    if floor > len(TOWER_ENEMIES):
+        bot.send_message(user_id, "🏆 Вы прошли всю Башню!", reply_markup=get_main_menu())
+        return
+        
+    enemy = TOWER_ENEMIES[floor]
+    players[user_id]['in_tower'] = True
+    players[user_id]['tower_enemy_hp'] = enemy['hp']
+    
+    bot.send_message(user_id, f"Вы вошли на {floor} этаж!\nПеред вами {enemy['name']}. Ваш ход!", reply_markup=get_battle_menu())
+
 @bot.message_handler(func=lambda message: message.text == "В бой!")
 def search_opponent(message):
     user_id = message.chat.id
     init_user(user_id, message.from_user.first_name, message.from_user.username)
+
+    if players[user_id].get('in_tower'):
+        bot.send_message(user_id, "Сначала завершите бой в Башне!", reply_markup=get_battle_menu())
+        return
 
     if players[user_id]['opponent'] is not None:
         bot.send_message(user_id, "Вы уже находитесь в бою!", reply_markup=get_battle_menu())
@@ -555,10 +693,12 @@ def search_opponent(message):
         players[first_turn]['is_turn'] = True
         players[second_turn]['is_turn'] = False
 
+        reset_inactivity_timer(first_turn)
+
         for uid in (user_id, opponent_id):
             enemy_name = players[players[uid]['opponent']]['name']
             msg = f"Противник найден: {enemy_name}!\n"
-            msg += "Ваш ход!" if players[uid]['is_turn'] else "Ход противника, ожидайте..."
+            msg += f"Ваш ход! (Лимит времени: {MOVE_TIMEOUT} сек.)" if players[uid]['is_turn'] else "Ход противника, ожидайте..."
             bot.send_message(uid, msg, reply_markup=get_battle_menu())
     else:
         queue.append(user_id)
@@ -568,6 +708,10 @@ def search_opponent(message):
 def start_raid_queue(message):
     user_id = message.chat.id
     init_user(user_id, message.from_user.first_name, message.from_user.username)
+
+    if players[user_id].get('in_tower'):
+        bot.send_message(user_id, "Сначала завершите бой в Башне!", reply_markup=get_battle_menu())
+        return
 
     if user_id in raid_cooldowns:
         timeLeft = raid_cooldowns[user_id] - time.time()
@@ -773,6 +917,55 @@ def attack_tyrant(message):
 @bot.message_handler(func=lambda message: message.text == "Атака")
 def attack(message):
     user_id = message.chat.id
+    init_user(user_id, message.from_user.first_name, message.from_user.username)
+
+    if players[user_id].get('in_tower'):
+        floor = players[user_id]['tower_floor']
+        if floor > len(TOWER_ENEMIES):
+            bot.send_message(user_id, "Вы прошли всю Башню!", reply_markup=get_main_menu())
+            players[user_id]['in_tower'] = False
+            return
+            
+        enemy = TOWER_ENEMIES[floor]
+        base_dmg = random.randint(15, 25)
+        damage = base_dmg + (players[user_id]['up_dmg'] * 2)
+        players[user_id]['tower_enemy_hp'] -= damage
+        
+        msg = f"⚔️ Вы нанесли {damage} урона монстру {enemy['name']}!"
+        
+        if players[user_id]['tower_enemy_hp'] <= 0:
+            players[user_id]['in_tower'] = False
+            players[user_id]['hp'] = players[user_id]['max_hp']
+            players[user_id]['tower_floor'] += 1
+            
+            coins_gain = enemy['coins']
+            xp_gain = enemy['xp']
+            leveled_up = add_xp_and_coins(user_id, xp_gain, coins_gain)
+            
+            win_msg = f"🏆 Вы одолели монстра {enemy['name']} и прошли этаж {floor}!\nНаграда: +{xp_gain} XP, +{coins_gain} монет 💰\nЗдоровье восстановлено."
+            if leveled_up:
+                new_lvl = players[user_id]['level']
+                new_rank = RANKS.get(new_lvl, "Абсолют")
+                win_msg += f"\n\n🎉 ПОЗДРАВЛЯЕМ! Вы повысили уровень до {new_lvl} ({new_rank})!"
+            bot.send_message(user_id, win_msg, reply_markup=get_main_menu())
+            save_players_data()
+            return
+        
+        e_dmg = random.randint(enemy['dmg'][0], enemy['dmg'][1])
+        players[user_id]['hp'] -= e_dmg
+        
+        msg += f"\n🩸 {enemy['name']} атакует в ответ и наносит {e_dmg} урона!\nВаше здоровье: {max(0, players[user_id]['hp'])} HP\nЗдоровье монстра: {max(0, players[user_id]['tower_enemy_hp'])} HP"
+        
+        if players[user_id]['hp'] <= 0:
+            players[user_id]['in_tower'] = False
+            players[user_id]['hp'] = players[user_id]['max_hp']
+            msg += "\n\n☠️ Вы проиграли! Здоровье восстановлено. Возвращайтесь, когда станете сильнее."
+            bot.send_message(user_id, msg, reply_markup=get_main_menu())
+        else:
+            bot.send_message(user_id, msg, reply_markup=get_battle_menu())
+        save_players_data()
+        return
+
     if user_id not in players or players[user_id]['opponent'] is None:
         bot.send_message(user_id, "Вы сейчас не в бою.", reply_markup=get_main_menu())
         return
@@ -803,11 +996,34 @@ def attack(message):
     else:
         players[user_id]['is_turn'] = False
         players[opponent_id]['is_turn'] = True
-        bot.send_message(opponent_id, "Ваш ход! Выберите действие.")
+        reset_inactivity_timer(opponent_id)
+        bot.send_message(opponent_id, f"Ваш ход! (Лимит времени: {MOVE_TIMEOUT} сек.) Выберите действие.")
+    save_players_data()
 
 @bot.message_handler(func=lambda message: message.text == "Защита")
 def defend(message):
     user_id = message.chat.id
+    init_user(user_id, message.from_user.first_name, message.from_user.username)
+
+    if players[user_id].get('in_tower'):
+        floor = players[user_id]['tower_floor']
+        enemy = TOWER_ENEMIES[floor]
+        
+        e_dmg = random.randint(enemy['dmg'][0], enemy['dmg'][1]) // 2
+        players[user_id]['hp'] -= e_dmg
+        
+        msg = f"🛡️ Вы ушли в защиту!\n🩸 {enemy['name']} атакует, но урон снижен: {e_dmg} урона!\nВаше здоровье: {max(0, players[user_id]['hp'])} HP\nЗдоровье монстра: {max(0, players[user_id]['tower_enemy_hp'])} HP"
+        
+        if players[user_id]['hp'] <= 0:
+            players[user_id]['in_tower'] = False
+            players[user_id]['hp'] = players[user_id]['max_hp']
+            msg += "\n\n☠️ Вы проиграли! Здоровье восстановлено. Возвращайтесь, когда станете сильнее."
+            bot.send_message(user_id, msg, reply_markup=get_main_menu())
+        else:
+            bot.send_message(user_id, msg, reply_markup=get_battle_menu())
+        save_players_data()
+        return
+
     if user_id not in players or players[user_id]['opponent'] is None:
         bot.send_message(user_id, "Вы сейчас не в бою.", reply_markup=get_main_menu())
         return
@@ -820,14 +1036,25 @@ def defend(message):
     players[user_id]['is_defending'] = True
 
     bot.send_message(user_id, "Вы приготовились к защите. Следующий урон будет снижен!")
-    bot.send_message(opponent_id, "Противник ушел в глухую оборону.\nВаш ход!")
+    bot.send_message(opponent_id, f"Противник ушел в глухую оборону.\nВаш ход! (Лимит времени: {MOVE_TIMEOUT} сек.)")
 
     players[user_id]['is_turn'] = False
     players[opponent_id]['is_turn'] = True
+    reset_inactivity_timer(opponent_id)
+    save_players_data()
 
 @bot.message_handler(func=lambda message: message.text in ["🏳️ Сдаться", "Сдаться"])
 def surrender(message):
     user_id = message.chat.id
+    init_user(user_id, message.from_user.first_name, message.from_user.username)
+
+    if players[user_id].get('in_tower'):
+        players[user_id]['in_tower'] = False
+        players[user_id]['hp'] = players[user_id]['max_hp']
+        bot.send_message(user_id, "🏳️ Вы сбежали из Башни! Здоровье восстановлено.", reply_markup=get_main_menu())
+        save_players_data()
+        return
+
     if user_id not in players or players[user_id]['opponent'] is None:
         bot.send_message(user_id, "Вы сейчас не в бою.", reply_markup=get_main_menu())
         return
@@ -848,6 +1075,9 @@ def surrender(message):
         players[uid]['hp'] = players[uid]['max_hp']
         players[uid]['is_defending'] = False
         players[uid]['is_turn'] = False
+        battle_timers.pop(uid, None)
+
+    save_players_data()
 
     win_msg = "🏆 Противник сдался! Вы победили!\nНаграда: +10 XP, +20 монет 💰\nЗдоровье восстановлено."
     if leveled_up:
@@ -881,7 +1111,9 @@ def inventory(message):
 def back_to_menu(message):
     user_id = message.chat.id
     init_user(user_id, message.from_user.first_name, message.from_user.username)
-    if players[user_id]['opponent'] is not None:
+    if players[user_id].get('in_tower'):
+        bot.send_message(user_id, "Вы вернулись в меню боя Башни:", reply_markup=get_battle_menu())
+    elif players[user_id]['opponent'] is not None:
         bot.send_message(user_id, "Вы вернулись в меню боя:", reply_markup=get_battle_menu())
     elif active_raid is not None and user_id in active_raid['participants']:
         bot.send_message(user_id, "Вы в активном рейде:", reply_markup=get_raid_menu())
@@ -908,6 +1140,7 @@ def use_item(message):
             players[user_id]['hp'] = min(players[user_id]['max_hp'], players[user_id]['hp'] + heal_amount)
             
             progress_quest(user_id, 'potion_use', 1)
+            save_players_data()
 
             bot.send_message(user_id, f"Вы использовали Зелье лечения и восстановили {heal_amount} HP!\nТекущее здоровье: {players[user_id]['hp']}/{players[user_id]['max_hp']}")
 
@@ -915,7 +1148,25 @@ def use_item(message):
                 opponent_id = players[user_id]['opponent']
                 players[user_id]['is_turn'] = False
                 players[opponent_id]['is_turn'] = True
-                bot.send_message(opponent_id, "Противник потратил ход на зелье.\nВаш ход!")
+                reset_inactivity_timer(opponent_id)
+                bot.send_message(opponent_id, f"Противник потратил ход на зелье.\nВаш ход! (Лимит времени: {MOVE_TIMEOUT} сек.)")
+            elif players[user_id].get('in_tower'):
+                floor = players[user_id]['tower_floor']
+                enemy = TOWER_ENEMIES[floor]
+                e_dmg = random.randint(enemy['dmg'][0], enemy['dmg'][1])
+                players[user_id]['hp'] -= e_dmg
+                
+                msg_append = f"🩸 {enemy['name']} атакует вас, пока вы пили зелье, и наносит {e_dmg} урона!\nВаше здоровье: {max(0, players[user_id]['hp'])} HP"
+                
+                if players[user_id]['hp'] <= 0:
+                    players[user_id]['in_tower'] = False
+                    players[user_id]['hp'] = players[user_id]['max_hp']
+                    msg_append += "\n\n☠️ Вы проиграли! Здоровье восстановлено."
+                    bot.send_message(user_id, msg_append, reply_markup=get_main_menu())
+                else:
+                    bot.send_message(user_id, msg_append, reply_markup=get_battle_menu())
+                save_players_data()
+
         else:
             bot.send_message(user_id, "Этот предмет нельзя использовать.")
     else:
