@@ -258,11 +258,6 @@ def get_main_menu(user_id=None):
         KeyboardButton("🗼 Башня"),
         KeyboardButton("⚡ Прокачка"),
         KeyboardButton("📜 Квесты"),
-        KeyboardButton("Инвентарь"),
-        KeyboardButton("🎲 Казино"),
-        KeyboardButton("🛡️ Клан"),
-        KeyboardButton("👤 Профиль"),
-        KeyboardButton("🏆 Топ"),
         KeyboardButton("➡️ Вперед")
     )
     if user_id and user_id == ADMIN_ID:
@@ -272,6 +267,11 @@ def get_main_menu(user_id=None):
 def get_second_menu(user_id=None):
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add(
+        KeyboardButton("Инвентарь"),
+        KeyboardButton("🎲 Казино"),
+        KeyboardButton("🛡️ Клан"),
+        KeyboardButton("👤 Профиль"),
+        KeyboardButton("🏆 Топ"),
         KeyboardButton("⬅️ Назад")
     )
     if user_id and user_id == ADMIN_ID:
@@ -1113,7 +1113,7 @@ def show_profile(message):
         f"Прогресс: {progress_str}\n"
         f"До следующего ранга: {left_str}"
     )
-    bot.send_message(user_id, profile_text, reply_markup=get_main_menu(user_id))
+    bot.send_message(user_id, profile_text, reply_markup=get_second_menu(user_id))
 
 @bot.message_handler(func=lambda message: message.text and "Прокачка" in message.text)
 def show_upgrades(message):
