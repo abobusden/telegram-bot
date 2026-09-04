@@ -20,6 +20,13 @@ REQUIRED_CREATE_LEVEL = 5
 INITIAL_MAX_MEMBERS = 10
 BONUS_MEMBERS_PER_LEVEL = 2
 
+tyrant_boss = {
+    'hp': 50000,
+    'max_hp': 50000,
+    'level': 1,
+    'is_alive': True
+}
+
 conn = sqlite3.connect("game_database.db", check_same_thread=False)
 cursor = conn.cursor()
 
@@ -35,7 +42,12 @@ CREATE TABLE IF NOT EXISTS users (
     is_muted INTEGER DEFAULT 0,
     is_banned INTEGER DEFAULT 0,
     muted_until INTEGER DEFAULT 0,
-    banned_until INTEGER DEFAULT 0
+    banned_until INTEGER DEFAULT 0,
+    tower_floor INTEGER DEFAULT 1,
+    quest_battles INTEGER DEFAULT 0,
+    quest_casino INTEGER DEFAULT 0,
+    quest_claimed INTEGER DEFAULT 0,
+    last_quest_reset INTEGER DEFAULT 0
 )
 """)
 
@@ -178,7 +190,11 @@ def sync_user_db(user_id, username):
     conn.commit()
 
 def get_db_user(user_id):
-    cursor.execute("SELECT user_id, username, level, xp, coins, clan_id, clan_role, is_muted, is_banned, muted_until, banned_until FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("""
+        SELECT user_id, username, level, xp, coins, clan_id, clan_role, is_muted, is_banned, muted_until, banned_until,
+               tower_floor, quest_battles, quest_casino, quest_claimed, last_quest_reset
+        FROM users WHERE user_id = ?
+    """, (user_id,))
     row = cursor.fetchone()
     if row:
         return {
@@ -192,9 +208,26 @@ def get_db_user(user_id):
             "is_muted": row[7],
             "is_banned": row[8],
             "muted_until": row[9],
-            "banned_until": row[10]
+            "banned_until": row[10],
+            "tower_floor": row[11],
+            "quest_battles": row[12],
+            "quest_casino": row[13],
+            "quest_claimed": row[14],
+            "last_quest_reset": row[15]
         }
     return None
+
+def check_quest_reset(user_id):
+    db_user = get_db_user(user_id)
+    if not db_user:
+        return
+    now = int(time.time())
+    if now - db_user['last_quest_reset'] >= 86400:
+        cursor.execute("""
+            UPDATE users SET quest_battles = 0, quest_casino = 0, quest_claimed = 0, last_quest_reset = ?
+            WHERE user_id = ?
+        """, (now, user_id))
+        conn.commit()
 
 def get_clan_by_id(clan_id):
     cursor.execute("SELECT clan_id, name, tag, leader_id, level, xp, type, max_members FROM clans WHERE clan_id = ?", (clan_id,))
@@ -571,6 +604,7 @@ def update_activity(user_id):
 def init_user(user_id, name, username=None):
     uname = username or name
     sync_user_db(user_id, uname)
+    check_quest_reset(user_id)
     db_user = get_db_user(user_id)
     
     if user_id not in players:
@@ -590,7 +624,8 @@ def init_user(user_id, name, username=None):
             'losses': 0,
             'menu_page': 1,
             'mines_game': None,
-            'last_activity': time.time()
+            'last_activity': time.time(),
+            'tower_floor': db_user['tower_floor']
         }
     else:
         players[user_id]['name'] = name
@@ -598,6 +633,7 @@ def init_user(user_id, name, username=None):
         players[user_id]['level'] = db_user['level']
         players[user_id]['xp'] = db_user['xp']
         players[user_id]['coins'] = db_user['coins']
+        players[user_id]['tower_floor'] = db_user['tower_floor']
         players[user_id]['last_activity'] = time.time()
         if 'menu_page' not in players[user_id]:
             players[user_id]['menu_page'] = 1
@@ -631,6 +667,16 @@ def add_xp_and_coins(user_id, xp_gain, coins_gain):
 
     return leveled_up
 
+def increment_quest_battle(user_id):
+    check_quest_reset(user_id)
+    cursor.execute("UPDATE users SET quest_battles = quest_battles + 1 WHERE user_id = ?", (user_id,))
+    conn.commit()
+
+def increment_quest_casino(user_id):
+    check_quest_reset(user_id)
+    cursor.execute("UPDATE users SET quest_casino = quest_casino + 1 WHERE user_id = ?", (user_id,))
+    conn.commit()
+
 def get_progress_bar(xp):
     percent = min(100, max(0, xp))
     filled = percent // 10
@@ -642,6 +688,7 @@ def get_main_menu(page=1):
     if page == 1:
         markup.add(
             KeyboardButton("В бой!"),
+            KeyboardButton("🏰 Башня"),
             KeyboardButton("🎰 Казино"),
             KeyboardButton("Инвентарь"),
             KeyboardButton("👤 Профиль"),
@@ -649,6 +696,8 @@ def get_main_menu(page=1):
         )
     else:
         markup.add(
+            KeyboardButton("📜 Квесты"),
+            KeyboardButton("👹 Рейд на Тирана"),
             KeyboardButton("🏆 Топ"),
             KeyboardButton("🛡️ Кланы"),
             KeyboardButton("⬅️ Назад")
@@ -737,6 +786,9 @@ def generate_leaderboard(lb_type='rank', page=1):
 def end_battle(winner_id, loser_id):
     players[winner_id]['wins'] += 1
     players[loser_id]['losses'] += 1
+
+    increment_quest_battle(winner_id)
+    increment_quest_battle(loser_id)
 
     leveled_up = add_xp_and_coins(winner_id, 10, 20)
 
@@ -1138,6 +1190,7 @@ def handle_mines_callback(call):
     if call.data == "mines_cashout":
         win_amount = int(game['current_win'])
         add_xp_and_coins(user_id, 0, win_amount)
+        increment_quest_casino(user_id)
         players[user_id]['mines_game'] = None
         bot.edit_message_text(f"🎉 **Вы забрали выигрыш!**\nВы выиграли: 💰 {win_amount} монет!", user_id, call.message.message_id, parse_mode="Markdown")
         bot.answer_callback_query(call.id)
@@ -1149,6 +1202,7 @@ def handle_mines_callback(call):
         return
         
     if game['board'][cell_idx] == 'M':
+        increment_quest_casino(user_id)
         players[user_id]['mines_game'] = None
         markup = render_mines_keyboard(game, reveal_all=True)
         bot.edit_message_text(f"💥 **БОМБА!** Вы подорвались на мине.\nПотеряно: 💰 {game['bet']} монет.", user_id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
@@ -1163,6 +1217,7 @@ def handle_mines_callback(call):
         if safe_opened == 9:
             win_amount = int(game['current_win'])
             add_xp_and_coins(user_id, 0, win_amount)
+            increment_quest_casino(user_id)
             players[user_id]['mines_game'] = None
             markup = render_mines_keyboard(game, reveal_all=True)
             bot.edit_message_text(f"🏆 **НЕВЕРОЯТНО!** Вы открыли все безопасные ячейки!\nВыигрыш: 💰 {win_amount} монет!", user_id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
@@ -1170,6 +1225,209 @@ def handle_mines_callback(call):
             markup = render_mines_keyboard(game, reveal_all=False)
             bot.edit_message_text(f"💣 **Мины 4х3**\nОткрыто безопасных ячеек: {safe_opened}/9\nТекущий выигрыш: 💰 {int(game['current_win'])} монет", user_id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
         bot.answer_callback_query(call.id)
+
+@bot.message_handler(func=lambda message: message.text in ["🏰 Башня", "Башня"])
+def tower_menu(message):
+    if is_user_banned(message.chat.id):
+        rem = get_ban_remaining(message.chat.id)
+        time_str = f" Осталось: {format_time_remaining(rem)}" if rem > 0 else ""
+        bot.send_message(message.chat.id, f"⛔ Вы заблокированы и не можете использовать бота.{time_str}")
+        return
+    user_id = message.chat.id
+    init_user(user_id, message.from_user.first_name, message.from_user.username)
+    p = players[user_id]
+    
+    floor = p['tower_floor']
+    enemy_hp = 80 + (floor - 1) * 30
+    enemy_dmg = 10 + (floor - 1) * 5
+    reward_coins = 30 + floor * 15
+    reward_xp = 15 + floor * 5
+    
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton(f"⚔️ Сразиться на {floor} этаже", callback_data="tower_fight"))
+    
+    msg = (
+        f"🏰 **Башня Испытаний**\n\n"
+        f"Ваш текущий этаж: **{floor}**\n"
+        f"👾 Враг этажа: Страж этажа #{floor}\n"
+        f"❤️ HP Врага: {enemy_hp} | ⚔️ Урон Врага: {enemy_dmg}\n\n"
+        f"🎁 Награда за победу: 💰 {reward_coins} монет, 🔥 {reward_xp} XP"
+    )
+    bot.send_message(user_id, msg, reply_markup=markup, parse_mode="Markdown")
+
+@bot.callback_query_handler(func=lambda call: call.data == "tower_fight")
+def tower_fight_callback(call):
+    user_id = call.message.chat.id
+    if is_user_banned(user_id):
+        bot.answer_callback_query(call.id, "⛔ Вы заблокированы.")
+        return
+    init_user(user_id, call.from_user.first_name, call.from_user.username)
+    p = players[user_id]
+    
+    floor = p['tower_floor']
+    enemy_hp = 80 + (floor - 1) * 30
+    enemy_dmg = 10 + (floor - 1) * 5
+    player_hp = p['max_hp']
+    
+    battle_log = f"🏰 **Битва на {floor} этаже Башни!**\n\n"
+    
+    round_num = 1
+    while player_hp > 0 and enemy_hp > 0:
+        p_dmg = random.randint(15, 25) + (p['level'] * 3)
+        enemy_hp -= p_dmg
+        battle_log += f"Раунд {round_num}: Вы нанесли {p_dmg} урона. (HP Врага: {max(0, enemy_hp)})\n"
+        
+        if enemy_hp <= 0:
+            break
+            
+        e_dmg = random.randint(enemy_dmg - 3, enemy_dmg + 3)
+        player_hp -= e_dmg
+        battle_log += f"Страж ответил ударом на {e_dmg} урона! (Ваше HP: {max(0, player_hp)})\n"
+        round_num += 1
+        
+    if player_hp > 0:
+        reward_coins = 30 + floor * 15
+        reward_xp = 15 + floor * 5
+        p['tower_floor'] += 1
+        cursor.execute("UPDATE users SET tower_floor = ? WHERE user_id = ?", (p['tower_floor'], user_id))
+        conn.commit()
+        
+        leveled_up = add_xp_and_coins(user_id, reward_xp, reward_coins)
+        battle_log += f"\n🎉 **Победа!** Вы прошли {floor} этаж!\nПолучено: 💰 {reward_coins} монет, 🔥 {reward_xp} XP!"
+        if leveled_up:
+            battle_log += f"\n🎉 **Уровень повышен до {p['level']}!**"
+    else:
+        battle_log += f"\n☠️ **Вы пали в бою на {floor} этаже.** Попробуйте прокачаться и вернуться снова!"
+        
+    bot.edit_message_text(battle_log, user_id, call.message.message_id, parse_mode="Markdown")
+    bot.answer_callback_query(call.id)
+
+@bot.message_handler(func=lambda message: message.text in ["📜 Квесты", "Квесты"])
+def show_quests(message):
+    if is_user_banned(message.chat.id):
+        rem = get_ban_remaining(message.chat.id)
+        time_str = f" Осталось: {format_time_remaining(rem)}" if rem > 0 else ""
+        bot.send_message(message.chat.id, f"⛔ Вы заблокированы и не можете использовать бота.{time_str}")
+        return
+    user_id = message.chat.id
+    init_user(user_id, message.from_user.first_name, message.from_user.username)
+    db_user = get_db_user(user_id)
+    
+    battles = db_user['quest_battles']
+    casino = db_user['quest_casino']
+    claimed = db_user['quest_claimed']
+    
+    status_b = "✅ Выполнено" if battles >= 3 else f"⏳ {battles}/3"
+    status_c = "✅ Выполнено" if casino >= 2 else f"⏳ {casino}/2"
+    
+    msg = (
+        f"📜 **Ежедневные Квесты**\n\n"
+        f"1. Сыграть 3 боя в дуэлях: {status_b}\n"
+        f"2. Сыграть 2 раза в казино: {status_c}\n\n"
+        f"🎁 Награда за выполнение всех квестов: 💰 100 монет, 🔥 50 XP"
+    )
+    
+    markup = InlineKeyboardMarkup()
+    if battles >= 3 and casino >= 2:
+        if claimed == 0:
+            markup.add(InlineKeyboardButton("🎁 Забрать награду", callback_data="claim_quests"))
+        else:
+            markup.add(InlineKeyboardButton("✅ Награда получена", callback_data="ignore"))
+            
+    bot.send_message(user_id, msg, reply_markup=markup, parse_mode="Markdown")
+
+@bot.callback_query_handler(func=lambda call: call.data == "claim_quests")
+def claim_quests_callback(call):
+    user_id = call.message.chat.id
+    if is_user_banned(user_id):
+        bot.answer_callback_query(call.id, "⛔ Вы заблокированы.")
+        return
+    db_user = get_db_user(user_id)
+    if db_user['quest_battles'] >= 3 and db_user['quest_casino'] >= 2 and db_user['quest_claimed'] == 0:
+        cursor.execute("UPDATE users SET quest_claimed = 1 WHERE user_id = ?", (user_id,))
+        conn.commit()
+        add_xp_and_coins(user_id, 50, 100)
+        bot.edit_message_text("🎁 **Вы успешно получили награду за ежедневные квесты:** +100 монет 💰 и +50 XP 🔥!", user_id, call.message.message_id, parse_mode="Markdown")
+    else:
+        bot.answer_callback_query(call.id, "Квесты еще не выполнены или награда уже забрана!")
+
+@bot.message_handler(func=lambda message: message.text in ["👹 Рейд на Тирана", "Рейд на Тирана", "Тиран"])
+def tyrant_raid_menu(message):
+    if is_user_banned(message.chat.id):
+        rem = get_ban_remaining(message.chat.id)
+        time_str = f" Осталось: {format_time_remaining(rem)}" if rem > 0 else ""
+        bot.send_message(message.chat.id, f"⛔ Вы заблокированы и не можете использовать бота.{time_str}")
+        return
+    user_id = message.chat.id
+    init_user(user_id, message.from_user.first_name, message.from_user.username)
+    
+    status = "Актвен" if tyrant_boss['is_alive'] else "Повержен"
+    
+    msg = (
+        f"👹 **Мировой Босс: Древний Тиран**\n\n"
+        f"Статус: **{status}**\n"
+        f"Уровень босса: **{tyrant_boss['level']}**\n"
+        f"❤️ HP Босса: **{tyrant_boss['hp']} / {tyrant_boss['max_hp']}**\n\n"
+        f"Каждая атака наносит случайный урон боссу и приносит золото и опыт!"
+    )
+    
+    markup = InlineKeyboardMarkup()
+    if tyrant_boss['is_alive']:
+        markup.add(InlineKeyboardButton("⚔️ Атаковать Тирана", callback_data="attack_tyrant"))
+    else:
+        markup.add(InlineKeyboardButton("🔄 Возродить Тирана", callback_data="respawn_tyrant"))
+        
+    bot.send_message(user_id, msg, reply_markup=markup, parse_mode="Markdown")
+
+@bot.callback_query_handler(func=lambda call: call.data in ["attack_tyrant", "respawn_tyrant"])
+def tyrant_action_callback(call):
+    user_id = call.message.chat.id
+    if is_user_banned(user_id):
+        bot.answer_callback_query(call.id, "⛔ Вы заблокированы.")
+        return
+    init_user(user_id, call.from_user.first_name, call.from_user.username)
+    p = players[user_id]
+    
+    if call.data == "respawn_tyrant":
+        if not tyrant_boss['is_alive']:
+            tyrant_boss['level'] += 1
+            tyrant_boss['max_hp'] = 50000 * tyrant_boss['level']
+            tyrant_boss['hp'] = tyrant_boss['max_hp']
+            tyrant_boss['is_alive'] = True
+            bot.answer_callback_query(call.id, "👹 Тиран возродился и стал сильнее!")
+            tyrant_raid_menu(call.message)
+            return
+        else:
+            bot.answer_callback_query(call.id, "Тиран еще жив!")
+            return
+
+    if not tyrant_boss['is_alive']:
+        bot.answer_callback_query(call.id, "Тиран повержен! Возродите его.")
+        return
+        
+    dmg = random.randint(100, 300) + (p['level'] * 20)
+    tyrant_boss['hp'] -= dmg
+    coins = dmg // 5
+    xp = dmg // 10
+    
+    add_xp_and_coins(user_id, xp, coins)
+    
+    if tyrant_boss['hp'] <= 0:
+        tyrant_boss['hp'] = 0
+        tyrant_boss['is_alive'] = False
+        msg = f"💥 **ЛЕГЕНДАРНО!** Вы нанесли последний удар ({dmg} урона) и добили **Тирана**!\nВам вручена супернаграда: 💰 1000 монет и 🔥 500 XP!"
+        add_xp_and_coins(user_id, 500, 1000)
+    else:
+        msg = f"⚔️ Вы нанесли Тирану **{dmg}** урона!\nПолучено: 💰 {coins} монет, 🔥 {xp} XP!\nОсталось HP у Тирана: **{tyrant_boss['hp']}/{tyrant_boss['max_hp']}**"
+        
+    markup = InlineKeyboardMarkup()
+    if tyrant_boss['is_alive']:
+        markup.add(InlineKeyboardButton("⚔️ Атаковать снова", callback_data="attack_tyrant"))
+    else:
+        markup.add(InlineKeyboardButton("🔄 Возродить Тирана", callback_data="respawn_tyrant"))
+        
+    bot.edit_message_text(msg, user_id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+    bot.answer_callback_query(call.id)
 
 @bot.message_handler(func=lambda message: message.text in ["👤 Профиль", "Профиль"])
 def show_profile(message):
@@ -1205,6 +1463,7 @@ def show_profile(message):
         f"Игрок: {username_str}\n"
         f"Клан: {clan_str}\n"
         f"Ранг: 🔥 {rank_name} ({p['level']} уровень)\n"
+        f"Этаж в Башне: 🏰 {p['tower_floor']}\n"
         f"Монеты: 💰 {p['coins']}\n"
         f"Победы: {p['wins']} | Поражения: {p['losses']}\n"
         f"Опыт: {xp_str}\n"
@@ -1755,6 +2014,7 @@ def handle_bets_input(message):
     if state == 'awaiting_dice_bet':
         user_states.pop(user_id, None)
         add_xp_and_coins(user_id, 0, -bet)
+        increment_quest_casino(user_id)
         
         bot.send_message(user_id, f"🎲 Вы сделали ставку {bet} монет. Бросаем кости...")
         user_msg = bot.send_dice(user_id, emoji='🎲')
