@@ -1,4 +1,2 @@
-pyTelegramBotAPI
-requests
-urllib3
-flask
+aiogram==3.7.0
+aiosqlite==0.20.0
