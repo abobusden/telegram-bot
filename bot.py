@@ -1,7 +1,3 @@
-# ============================================
-# GTA CRIME BOT — с aiohttp-заглушкой для Render
-# ============================================
-
 import asyncio
 import logging
 import os
@@ -13,12 +9,9 @@ from aiogram.enums import ParseMode
 
 from config import BOT_TOKEN
 from database import init_db
-from handlers import start
+from handlers import start, jobs
 
 
-# ============================================
-# ВЕБ-СЕРВЕР ДЛЯ RENDER (чтобы не ругался на порт)
-# ============================================
 async def handle(request):
     return web.Response(text="🚀 GTA Crime Bot is running!")
 
@@ -27,32 +20,23 @@ async def start_web_server():
     app = web.Application()
     app.router.add_get("/", handle)
     app.router.add_get("/health", handle)
-
     runner = web.AppRunner(app)
     await runner.setup()
-
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
     print(f"✅ Web server started on port {port}")
 
 
-# ============================================
-# ЗАПУСК БОТА
-# ============================================
 async def main():
     logging.basicConfig(level=logging.INFO)
     await init_db()
-
-    # Веб-сервер в фоне
     asyncio.create_task(start_web_server())
 
-    bot = Bot(
-        token=BOT_TOKEN,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-    )
+    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
     dp.include_router(start.router)
+    dp.include_router(jobs.router)
 
     print("🚀 Бот запущен!")
     await dp.start_polling(bot)
