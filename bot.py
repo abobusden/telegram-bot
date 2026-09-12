@@ -1,13 +1,12 @@
 # ============================================
-# GTA CRIME BOT — с Flask-заглушкой для Render
+# GTA CRIME BOT — с aiohttp-заглушкой для Render
 # ============================================
 
 import asyncio
 import logging
 import os
-from threading import Thread
 
-from flask import Flask
+from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
@@ -18,24 +17,24 @@ from handlers import start
 
 
 # ============================================
-# FLASK-ЗАГЛУШКА (для Render Web Service)
+# ВЕБ-СЕРВЕР ДЛЯ RENDER (чтобы не ругался на порт)
 # ============================================
-app = Flask(__name__)
+async def handle(request):
+    return web.Response(text="🚀 GTA Crime Bot is running!")
 
 
-@app.route('/')
-def home():
-    return "🚀 GTA Crime Bot is running!"
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get("/", handle)
+    app.router.add_get("/health", handle)
 
+    runner = web.AppRunner(app)
+    await runner.setup()
 
-@app.route('/health')
-def health():
-    return "OK", 200
-
-
-def run_flask():
     port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    print(f"✅ Web server started on port {port}")
 
 
 # ============================================
@@ -44,6 +43,9 @@ def run_flask():
 async def main():
     logging.basicConfig(level=logging.INFO)
     await init_db()
+
+    # Веб-сервер в фоне
+    asyncio.create_task(start_web_server())
 
     bot = Bot(
         token=BOT_TOKEN,
@@ -57,10 +59,6 @@ async def main():
 
 
 if __name__ == "__main__":
-    # Flask в фоне (для Render)
-    Thread(target=run_flask, daemon=True).start()
-
-    # Бот
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
