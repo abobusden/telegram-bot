@@ -24,7 +24,7 @@ from aiogram.types import (
 # ⚙️ КОНФИГ
 # ============================================
 # ⚠️ ВСТАВЬ СЮДА СВОЙ ТОКЕН ОТ @BotFather
-BOT_TOKEN = "СЮДА_ВСТАВЬ_ТОКЕН"
+BOT_TOKEN = "8609399059:AAH1VPl7e9LLPb3zIQ4g7sCtD8yZPtK12-c"
 
 SUPPORT_USERNAME = "pegvi"
 DB_PATH = "gta_bot.db"
