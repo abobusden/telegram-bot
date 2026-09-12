@@ -12,7 +12,6 @@ from database import get_player, update_player
 from keyboards import (
     jobs_menu_kb, back_to_jobs_kb,
     taxi_menu_kb, taxi_orders_kb,
-    taxi_client_kb, taxi_cancel_kb,
 )
 
 
@@ -27,7 +26,7 @@ JOBS = {
         "lvl": 1,
         "pay": 100,
         "cd": 180,        # 3 минуты
-        "fail_pay": 50,   # штраф при провале
+        "fail_pay": 50,
         "exp": 10,
     },
     "courier": {
@@ -56,7 +55,7 @@ JOBS = {
     },
 }
 
-# Хранилище кулдаунов (в оперативке)
+# Хранилище кулдаунов и состояний такси (в оперативке)
 job_cooldowns = {}          # {telegram_id: {job_key: datetime}}
 taxi_state = {}             # {telegram_id: {...}}
 
@@ -285,9 +284,6 @@ async def taxi_wait_order(callback: CallbackQuery):
 # ============================================
 @router.callback_query(F.data == "taxi_call")
 async def taxi_call(callback: CallbackQuery):
-    # Здесь будет поиск таксиста-игрока (позже)
-    # Пока — NPC-такси за $150
-
     player = await get_player(callback.from_user.id)
     if player["balance"] < 150:
         await callback.answer("💰 Нужно $150", show_alert=True)
@@ -304,3 +300,11 @@ async def taxi_call(callback: CallbackQuery):
         reply_markup=back_to_jobs_kb(),
     )
     await callback.answer("Поехали!")
+
+
+# ============================================
+# ЗАГЛУШКА ДЛЯ ЗАБЛОКИРОВАННЫХ КНОПОК
+# ============================================
+@router.callback_query(F.data == "noop")
+async def noop(callback: CallbackQuery):
+    await callback.answer("🔒 Уровень недостаточен", show_alert=True)
