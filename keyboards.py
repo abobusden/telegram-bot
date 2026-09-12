@@ -52,3 +52,60 @@ def profile_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🆘 Поддержка", url=f"https://t.me/{SUPPORT_USERNAME}")],
     ])
+# ============================================
+# КНОПКИ ДЛЯ РАБОТ
+# ============================================
+def jobs_menu_kb(level: int):
+    buttons = []
+
+    # NPC-работы
+    jobs = [
+        ("pizza", "🍔 Пицца — $100", 1),
+        ("courier", "📦 Курьер — $150", 1),
+        ("loader", "🏗 Грузчик — $300", 5),
+        ("trucker", "🚚 Дальнобой — $800", 10),
+    ]
+
+    for key, text, lvl in jobs:
+        if level >= lvl:
+            buttons.append([InlineKeyboardButton(text=text, callback_data=f"job_{key}")])
+        else:
+            buttons.append([InlineKeyboardButton(text=f"🔒 {text} (ур.{lvl})", callback_data="noop")])
+
+    # Такси
+    buttons.append([InlineKeyboardButton(text="🚕 Такси (PvP)", callback_data="taxi_menu")])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def back_to_jobs_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 К работам", callback_data="jobs_back")],
+    ])
+
+
+def taxi_menu_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🚕 Начать смену", callback_data="taxi_start_shift")],
+        [InlineKeyboardButton(text="🔙 К работам", callback_data="jobs_back")],
+    ])
+
+
+def taxi_orders_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📦 Ждать NPC-заказ", callback_data="taxi_wait_order")],
+        [InlineKeyboardButton(text="🚪 Закончить смену", callback_data="taxi_stop_shift")],
+    ])
+
+
+def taxi_client_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🚕 Вызвать такси", callback_data="taxi_call")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="jobs_back")],
+    ])
+
+
+def taxi_cancel_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отменить", callback_data="jobs_back")],
+    ])
