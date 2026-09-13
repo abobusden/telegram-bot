@@ -9,7 +9,10 @@ from aiogram.enums import ParseMode
 
 from config import BOT_TOKEN
 from database import init_db
-from handlers import start, jobs, crime, cops, shop, inventory, transport, menu
+from handlers import (
+    start, jobs, crime, cops, shop,
+    inventory, transport, home, menu,
+)
 
 
 async def handle(request):
@@ -44,6 +47,7 @@ async def main():
     dp.include_router(shop.router)
     dp.include_router(inventory.router)
     dp.include_router(transport.router)
+    dp.include_router(home.router)
     dp.include_router(jobs.router)
     dp.include_router(crime.router)
     dp.include_router(cops.router)
