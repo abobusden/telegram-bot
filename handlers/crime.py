@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 
-from database import get_player, update_player
+from database import get_player, update_player, add_exp
 from keyboards import crime_menu_kb, back_to_crime_kb
 
 
@@ -25,7 +25,7 @@ CRIMES = {
         "max_pay": 2000,
         "risk_win": 1,
         "risk_fail": 2,
-        "cd": 600,     # 10 мин
+        "cd": 600,
         "exp": 20,
     },
     "shop": {
@@ -35,7 +35,7 @@ CRIMES = {
         "max_pay": 3000,
         "risk_win": 2,
         "risk_fail": 3,
-        "cd": 1200,    # 20 мин
+        "cd": 1200,
         "exp": 30,
     },
     "drugs": {
@@ -45,7 +45,7 @@ CRIMES = {
         "max_pay": 5000,
         "risk_win": 3,
         "risk_fail": 4,
-        "cd": 1800,    # 30 мин
+        "cd": 1800,
         "exp": 50,
     },
     "bank": {
@@ -55,12 +55,12 @@ CRIMES = {
         "max_pay": 20000,
         "risk_win": 4,
         "risk_fail": 5,
-        "cd": 3600,    # 1 час
+        "cd": 3600,
         "exp": 100,
     },
 }
 
-crime_cooldowns = {}   # {telegram_id: {crime_key: datetime}}
+crime_cooldowns = {}
 
 
 # ============================================
@@ -115,12 +115,10 @@ async def do_crime(callback: CallbackQuery):
         await callback.answer("Сначала зарегистрируйся")
         return
 
-    # Проверка уровня
     if player["level"] < crime["lvl"]:
         await callback.answer(f"🔒 Нужен уровень {crime['lvl']}", show_alert=True)
         return
 
-    # Проверка кулдауна
     user_cd = crime_cooldowns.get(callback.from_user.id, {})
     last = user_cd.get(crime_key)
     now = datetime.now()
@@ -131,7 +129,7 @@ async def do_crime(callback: CallbackQuery):
         await callback.answer(f"⏳ Подожди {mins}:{secs:02d}", show_alert=True)
         return
 
-    # Шанс успеха: 60 + оружие + уровень - розыск*5
+    # Шанс успеха
     chance = 60
     if player["weapon"]:
         weapon_bonus = {"pistol": 10, "smg": 15, "shotgun": 18, "rifle": 20}
@@ -146,19 +144,23 @@ async def do_crime(callback: CallbackQuery):
     chance = max(5, min(95, chance))
 
     success = random.random() * 100 < chance
+    level_up_text = ""
 
     if success:
         pay = random.randint(crime["min_pay"], crime["max_pay"])
         new_wanted = min(5, player["wanted"] + crime["risk_win"])
         new_balance = player["balance"] + pay
-        new_exp = player["exp"] + crime["exp"]
 
         await update_player(
             callback.from_user.id,
             balance=new_balance,
-            exp=new_exp,
             wanted=new_wanted,
         )
+
+        # ✅ Опыт + автоуровень
+        exp_result = await add_exp(callback.from_user.id, crime["exp"])
+        if exp_result and exp_result["levels_up"] > 0:
+            level_up_text = f"\n\n🎉 <b>УРОВЕНЬ {exp_result['level']}!</b>"
 
         result_text = (
             f"✅ <b>УСПЕХ!</b>\n\n"
@@ -178,13 +180,12 @@ async def do_crime(callback: CallbackQuery):
             f"🚨 Розыск: {'⭐' * new_wanted}"
         )
 
-    # Кулдаун
     if callback.from_user.id not in crime_cooldowns:
         crime_cooldowns[callback.from_user.id] = {}
     crime_cooldowns[callback.from_user.id][crime_key] = now + timedelta(seconds=crime["cd"])
 
     await callback.message.edit_text(
-        result_text + f"\n\n⏱ КД: {crime['cd'] // 60} мин",
+        result_text + level_up_text + f"\n\n⏱ КД: {crime['cd'] // 60} мин",
         reply_markup=back_to_crime_kb(),
     )
     await callback.answer()
@@ -194,29 +195,20 @@ async def do_crime(callback: CallbackQuery):
     # ============================================
     player = await get_player(callback.from_user.id)
     if player["wanted"] >= 3:
-        # 60% шанс посадки
         if random.random() < 0.6:
             jail_minutes = {3: 30, 4: 60, 5: 120}.get(player["wanted"], 30)
             jail_until = datetime.now() + timedelta(minutes=jail_minutes)
 
-            # Сохраняем время выхода
-            await update_player(
-                callback.from_user.id,
-                # добавим поле jail_until через raw update
-            )
-
-            # Простое решение — сохранить в файл (позже сделаем через БД)
             jail_data[callback.from_user.id] = {
                 "until": jail_until,
                 "minutes": jail_minutes,
             }
 
-            mins = jail_minutes
             await callback.message.answer(
                 f"🚔 <b>ТЕБЯ ПОЙМАЛИ!</b>\n\n"
                 f"🚨 Розыск: {'⭐' * player['wanted']}\n"
-                f"⏱ Срок: {mins} мин\n\n"
-                f"Жди или зови адвоката (/start когда выйдешь)",
+                f"⏱ Срок: {jail_minutes} мин\n\n"
+                f"Жди или зови адвоката",
             )
         else:
             await callback.message.answer(
@@ -226,11 +218,13 @@ async def do_crime(callback: CallbackQuery):
             )
 
 
-# Хранилище тюрьмы (в оперативке)
+# ============================================
+# ХРАНИЛИЩЕ ТЮРЬМЫ
+# ============================================
 jail_data = {}
 
 
-def is_in_jail(telegram_id: int) -> dict | None:
+def is_in_jail(telegram_id: int):
     """Возвращает данные тюрьмы или None."""
     data = jail_data.get(telegram_id)
     if not data:
