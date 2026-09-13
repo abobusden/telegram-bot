@@ -39,13 +39,15 @@ async def main():
     )
     dp = Dispatcher()
 
+    # ⚠️ ПОРЯДОК ВАЖЕН!
+    # Конкретные хендлеры — раньше общих
     dp.include_router(start.router)
-    dp.include_router(jobs.router)
-    dp.include_router(crime.router)
-    dp.include_router(cops.router)
-    dp.include_router(shop.router)
-    dp.include_router(inventory.router)
-    dp.include_router(menu.router)   # последним!
+    dp.include_router(menu.router)        # Профиль
+    dp.include_router(shop.router)        # 🛒 МАГАЗИН — ПЕРЕД cops!
+    dp.include_router(inventory.router)   # Инвентарь
+    dp.include_router(jobs.router)        # Работы
+    dp.include_router(crime.router)       # Криминал
+    dp.include_router(cops.router)        # cops — ПОСЛЕДНИМ
 
     print("🚀 Бот запущен!")
     await dp.start_polling(bot)
