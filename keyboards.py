@@ -206,3 +206,45 @@ def inventory_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔙 Назад", callback_data="inv_back")],
     ])
+
+
+# ============================================
+# ТРАНСПОРТ
+# ============================================
+def transport_menu_kb(current_car=None):
+    buttons = []
+    buttons.append([InlineKeyboardButton(text="🏎 Автосалон", callback_data="autosalon")])
+
+    if current_car:
+        buttons.append([InlineKeyboardButton(text="🏠 Мой гараж", callback_data="garage")])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def autosalon_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🚗 Sedan — $5,000 (3/10)", callback_data="car_sedan")],
+        [InlineKeyboardButton(text="🚐 Минивэн — $8,000 (4/10)", callback_data="car_minivan")],
+        [InlineKeyboardButton(text="🚙 Внедорожник — $12,000 (5/10)", callback_data="car_suv")],
+        [InlineKeyboardButton(text="🏎 Спорткар — $25,000 (9/10)", callback_data="car_sportcar")],
+        [InlineKeyboardButton(text="🏎 Тюнингованная — $35,000 (8/10)", callback_data="car_tuned")],
+        [InlineKeyboardButton(text="🏎 Суперкар — $50,000 (10/10)", callback_data="car_supercar")],
+        [InlineKeyboardButton(text="🏍 Мотоцикл — $8,000 (6/10)", callback_data="car_moto")],
+        [InlineKeyboardButton(text="🏍 Чоппер — $15,000 (5/10)", callback_data="car_chopper")],
+        [InlineKeyboardButton(text="🏍 Спорт-байк — $18,000 (9/10)", callback_data="car_sportbike")],
+        [InlineKeyboardButton(text="🚚 Грузовик — $30,000 (+30% грузчик)", callback_data="car_truck")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="transport_back")],
+    ])
+
+
+def garage_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💸 Продать машину (70%)", callback_data="sell_car")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="transport_back")],
+    ])
+
+
+def back_to_transport_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 К транспорту", callback_data="transport_back")],
+    ])
