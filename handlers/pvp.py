@@ -23,9 +23,8 @@ from keyboards import (
 
 router = Router()
 
-# Хранилище вызовов и поиска
-active_challenges = {}   # {challenger_id: {"target_id": ..., "bet": ..., "until": datetime}}
-search_state = {}        # {telegram_id: True}
+# Хранилище вызовов
+active_challenges = {}
 
 
 # ============================================
@@ -82,7 +81,6 @@ async def pvp_back(callback: CallbackQuery):
 async def pvp_search(callback: CallbackQuery):
     player = await get_player(callback.from_user.id)
 
-    # Показываем "поиск"
     await callback.message.delete()
     msg = await callback.message.answer(
         f"⚔️ <b>ПОИСК СОПЕРНИКА...</b>\n\n"
@@ -91,14 +89,13 @@ async def pvp_search(callback: CallbackQuery):
         parse_mode=ParseMode.HTML,
     )
 
-    # Ждём 3 секунды (для реализма)
+    # Ждём 3 секунды
     await asyncio.sleep(3)
 
     # Ищем игроков онлайн
     opponents = await get_online_players(callback.from_user.id, limit=5)
 
     if opponents:
-        # Нашли игроков
         await msg.edit_text(
             f"⚔️ <b>СОПЕРНИКИ НАЙДЕНЫ</b>\n\n"
             f"Выбери, с кем драться:",
@@ -106,7 +103,7 @@ async def pvp_search(callback: CallbackQuery):
             parse_mode=ParseMode.HTML,
         )
     else:
-        # Нет игроков → NPC через 1 мин (пропускаем ожидание, сразу NPC)
+        # NPC
         await msg.edit_text(
             f"⚔️ <b>ИГРОКОВ НЕТ</b>\n\n"
             f"⏳ Ищем NPC...",
@@ -115,7 +112,6 @@ async def pvp_search(callback: CallbackQuery):
         )
         await asyncio.sleep(2)
 
-        # NPC
         await msg.edit_text(
             f"⚔️ <b>NPC НАЙДЕН</b>\n\n"
             f"👤 Соперник: NPC\n"
@@ -139,9 +135,8 @@ async def pvp_bet(callback: CallbackQuery):
         await callback.answer(f"💰 Нужно ${bet}", show_alert=True)
         return
 
-    # Сохраняем вызов
     active_challenges[callback.from_user.id] = {
-        "target_id": None,  # NPC
+        "target_id": None,
         "bet": bet,
         "until": datetime.now() + timedelta(seconds=60),
     }
@@ -175,17 +170,12 @@ async def pvp_fight(callback: CallbackQuery):
         await callback.answer("💰 Не хватает денег", show_alert=True)
         return
 
-    # Симуляция боя
     result = simulate_fight(player)
 
     if result["winner"] == "player":
-        # Победа
         new_balance = player["balance"] + bet
-        await update_player(callback.from_user.id, balance=new_balance)
+        await update_player(callback.from_user.id, balance=new_balance, hp=20)
         await add_pvp_win(callback.from_user.id)
-
-        # HP = 20
-        await update_player(callback.from_user.id, hp=20)
 
         await callback.message.edit_text(
             f"⚔️ <b>БОЙ ЗАВЕРШЁН</b>\n\n"
@@ -197,13 +187,9 @@ async def pvp_fight(callback: CallbackQuery):
             parse_mode=ParseMode.HTML,
         )
     elif result["winner"] == "npc":
-        # Поражение
         new_balance = max(0, player["balance"] - bet)
-        await update_player(callback.from_user.id, balance=new_balance)
+        await update_player(callback.from_user.id, balance=new_balance, hp=20)
         await add_pvp_loss(callback.from_user.id)
-
-        # HP = 20
-        await update_player(callback.from_user.id, hp=20)
 
         await callback.message.edit_text(
             f"⚔️ <b>БОЙ ЗАВЕРШЁН</b>\n\n"
@@ -214,7 +200,7 @@ async def pvp_fight(callback: CallbackQuery):
             parse_mode=ParseMode.HTML,
         )
     else:
-        # Ничья — ставка возвращается
+        await update_player(callback.from_user.id, hp=20)
         await callback.message.edit_text(
             f"⚔️ <b>НИЧЬЯ</b>\n\n"
             f"💰 Ставка возвращена\n"
@@ -223,15 +209,8 @@ async def pvp_fight(callback: CallbackQuery):
             parse_mode=ParseMode.HTML,
         )
 
-    # HP = 20
-    await update_player(callback.from_user.id, hp=20)
-
-    # Опыт
     await add_exp(callback.from_user.id, 30)
-
-    # Очищаем вызов
     active_challenges.pop(callback.from_user.id, None)
-
     await callback.answer()
 
 
@@ -239,20 +218,14 @@ async def pvp_fight(callback: CallbackQuery):
 # СИМУЛЯЦИЯ БОЯ
 # ============================================
 def simulate_fight(player):
-    """
-    Симулирует бой.
-    Возвращает {"winner": "player" / "npc" / "draw"}
-    """
     player_hp = 100
     npc_hp = 100
 
-    # Статы игрока
     player_damage_base = 20
     if player["weapon"]:
         weapon_bonus = {"pistol": 10, "smg": 15, "shotgun": 18, "rifle": 20}
         player_damage_base += weapon_bonus.get(player["weapon"], 0)
 
-    # NPC статы (случайные в диапазоне игрока)
     npc_damage_base = 20 + random.randint(0, 15)
 
     turn = 0
@@ -261,14 +234,12 @@ def simulate_fight(player):
     while player_hp > 0 and npc_hp > 0 and turn < max_turns:
         turn += 1
 
-        # Игрок бьёт
         dmg = player_damage_base + random.randint(1, 20)
         npc_hp -= dmg
 
         if npc_hp <= 0:
             return {"winner": "player"}
 
-        # NPC бьёт
         dmg = npc_damage_base + random.randint(1, 20)
         player_hp -= dmg
 
