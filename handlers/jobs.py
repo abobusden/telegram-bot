@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 
-from database import get_player, update_player
+from database import get_player, update_player, add_exp
 from keyboards import (
     jobs_menu_kb, back_to_jobs_kb,
     taxi_menu_kb, taxi_orders_kb,
@@ -21,46 +21,15 @@ router = Router()
 # NPC-РАБОТЫ
 # ============================================
 JOBS = {
-    "pizza": {
-        "name": "🍔 Пицца",
-        "lvl": 1,
-        "pay": 100,
-        "cd": 180,
-        "fail_pay": 50,
-        "exp": 10,
-    },
-    "courier": {
-        "name": "📦 Курьер",
-        "lvl": 1,
-        "pay": 150,
-        "cd": 300,
-        "fail_pay": 50,
-        "exp": 15,
-    },
-    "loader": {
-        "name": "🏗 Грузчик",
-        "lvl": 5,
-        "pay": 300,
-        "cd": 1200,
-        "fail_pay": 100,
-        "exp": 25,
-    },
-    "trucker": {
-        "name": "🚚 Дальнобой",
-        "lvl": 10,
-        "pay": 800,
-        "cd": 3600,
-        "fail_pay": 200,
-        "exp": 50,
-    },
+    "pizza":   {"name": "🍔 Пицца",   "lvl": 1,  "pay": 100, "cd": 180,  "fail_pay": 50,  "exp": 10},
+    "courier": {"name": "📦 Курьер",  "lvl": 1,  "pay": 150, "cd": 300,  "fail_pay": 50,  "exp": 15},
+    "loader":  {"name": "🏗 Грузчик", "lvl": 5,  "pay": 300, "cd": 1200, "fail_pay": 100, "exp": 25},
+    "trucker": {"name": "🚚 Дальнобой","lvl": 10,"pay": 800, "cd": 3600, "fail_pay": 200, "exp": 50},
 }
 
-# ============================================
-# ХРАНИЛИЩА
-# ============================================
-job_cooldowns = {}   # {telegram_id: {job_key: datetime}}
-taxi_state = {}      # {telegram_id: {...}}
-taxi_hourly = {}     # {telegram_id: {"count": int, "reset_at": datetime}}
+job_cooldowns = {}
+taxi_state = {}
+taxi_hourly = {}
 
 
 # ============================================
@@ -97,7 +66,7 @@ async def jobs_back(callback: CallbackQuery):
 
 
 # ============================================
-# ВЫПОЛНЕНИЕ NPC-РАБОТЫ
+# NPC-РАБОТА
 # ============================================
 @router.callback_query(F.data.startswith("job_"))
 async def do_job(callback: CallbackQuery):
@@ -128,6 +97,7 @@ async def do_job(callback: CallbackQuery):
         return
 
     success = random.random() < 0.9
+    level_up_text = ""
 
     if success:
         pay = job["pay"]
@@ -135,9 +105,12 @@ async def do_job(callback: CallbackQuery):
             pay = int(pay * 1.3)
 
         new_balance = player["balance"] + pay
-        new_exp = player["exp"] + job["exp"]
+        await update_player(callback.from_user.id, balance=new_balance)
 
-        await update_player(callback.from_user.id, balance=new_balance, exp=new_exp)
+        # ✅ Добавляем опыт + автоуровень
+        exp_result = await add_exp(callback.from_user.id, job["exp"])
+        if exp_result and exp_result["levels_up"] > 0:
+            level_up_text = f"\n\n🎉 <b>УРОВЕНЬ {exp_result['level']}!</b>"
 
         result_text = (
             f"✅ <b>УСПЕХ!</b>\n\n"
@@ -148,7 +121,6 @@ async def do_job(callback: CallbackQuery):
     else:
         penalty = job["fail_pay"]
         new_balance = max(0, player["balance"] - penalty)
-
         await update_player(callback.from_user.id, balance=new_balance)
 
         result_text = (
@@ -162,7 +134,7 @@ async def do_job(callback: CallbackQuery):
     job_cooldowns[callback.from_user.id][job_key] = now + timedelta(seconds=job["cd"])
 
     await callback.message.edit_text(
-        result_text + f"\n\n⏱ Следующая работа через {job['cd'] // 60} мин",
+        result_text + level_up_text + f"\n\n⏱ Следующая работа через {job['cd'] // 60} мин",
         reply_markup=back_to_jobs_kb(),
     )
     await callback.answer()
@@ -293,7 +265,7 @@ async def taxi_stop_shift(callback: CallbackQuery):
 
 
 # ============================================
-# NPC-ЗАКАЗ ДЛЯ ТАКСИСТА (с опытом!)
+# NPC-ЗАКАЗ (с опытом + автоуровень)
 # ============================================
 @router.callback_query(F.data == "taxi_wait_order")
 async def taxi_wait_order(callback: CallbackQuery):
@@ -315,7 +287,6 @@ async def taxi_wait_order(callback: CallbackQuery):
     if hourly["count"] >= 10:
         left = int((hourly["reset_at"] - now).total_seconds())
         mins, secs = divmod(left, 60)
-
         taxi_state.pop(callback.from_user.id, None)
 
         await callback.message.edit_text(
@@ -336,7 +307,6 @@ async def taxi_wait_order(callback: CallbackQuery):
         await callback.answer(f"⏳ Подожди {left} сек", show_alert=True)
         return
 
-    # 20% — клиентов нет
     if random.random() >= 0.8:
         state["last_order"] = now + timedelta(seconds=30)
         taxi_state[callback.from_user.id] = state
@@ -352,19 +322,18 @@ async def taxi_wait_order(callback: CallbackQuery):
         await callback.answer("Клиентов нет")
         return
 
-    # Заказ есть — NPC платит $200 + 15 опыта
     pay = 200
     exp_gain = 15
 
     player = await get_player(callback.from_user.id)
     new_balance = player["balance"] + pay
-    new_exp = player["exp"] + exp_gain
+    await update_player(callback.from_user.id, balance=new_balance)
 
-    await update_player(
-        callback.from_user.id,
-        balance=new_balance,
-        exp=new_exp,
-    )
+    # ✅ Опыт + автоуровень
+    exp_result = await add_exp(callback.from_user.id, exp_gain)
+    level_up_text = ""
+    if exp_result and exp_result["levels_up"] > 0:
+        level_up_text = f"\n🎉 <b>УРОВЕНЬ {exp_result['level']}!</b>"
 
     state["earned"] = state.get("earned", 0) + pay
     state["exp"] = state.get("exp", 0) + exp_gain
@@ -379,7 +348,7 @@ async def taxi_wait_order(callback: CallbackQuery):
         f"🚕 <b>NPC-ЗАКАЗ</b>\n\n"
         f"👤 Клиент: NPC\n"
         f"💰 +${pay}\n"
-        f"📊 +{exp_gain} опыта\n\n"
+        f"📊 +{exp_gain} опыта{level_up_text}\n\n"
         f"💰 ${state['earned']} | 📦 {state['orders']}\n"
         f"⏱ За час: {hourly['count']}/10\n"
         f"⏱ Следующий через 30 сек",
@@ -411,9 +380,6 @@ async def taxi_call(callback: CallbackQuery):
     await callback.answer("Поехали!")
 
 
-# ============================================
-# ЗАГЛУШКА
-# ============================================
 @router.callback_query(F.data == "noop")
 async def noop(callback: CallbackQuery):
     await callback.answer("🔒 Уровень недостаточен", show_alert=True)
