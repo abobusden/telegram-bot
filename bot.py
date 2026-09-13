@@ -9,7 +9,7 @@ from aiogram.enums import ParseMode
 
 from config import BOT_TOKEN
 from database import init_db
-from handlers import start, jobs, crime, cops
+from handlers import start, jobs, crime, cops, shop, inventory, menu
 
 
 async def handle(request):
@@ -33,12 +33,19 @@ async def main():
     await init_db()
     asyncio.create_task(start_web_server())
 
-    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    bot = Bot(
+        token=BOT_TOKEN,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
     dp = Dispatcher()
+
     dp.include_router(start.router)
     dp.include_router(jobs.router)
     dp.include_router(crime.router)
     dp.include_router(cops.router)
+    dp.include_router(shop.router)
+    dp.include_router(inventory.router)
+    dp.include_router(menu.router)   # последним!
 
     print("🚀 Бот запущен!")
     await dp.start_polling(bot)
