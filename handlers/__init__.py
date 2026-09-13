@@ -6,4 +6,6 @@ from . import shop
 from . import inventory
 from . import transport
 from . import home
+from . import gangs
+from . import pvp
 from . import menu
