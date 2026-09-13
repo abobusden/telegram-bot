@@ -11,7 +11,8 @@ from config import BOT_TOKEN
 from database import init_db
 from handlers import (
     start, jobs, crime, cops, shop,
-    inventory, transport, home, menu,
+    inventory, transport, home,
+    gangs, pvp, menu,
 )
 
 
@@ -42,15 +43,18 @@ async def main():
     )
     dp = Dispatcher()
 
+    # ⚠️ Порядок: конкретные хендлеры раньше общих
     dp.include_router(start.router)
-    dp.include_router(menu.router)
+    dp.include_router(menu.router)         # профиль + листание
     dp.include_router(shop.router)
     dp.include_router(inventory.router)
     dp.include_router(transport.router)
     dp.include_router(home.router)
+    dp.include_router(gangs.router)        # банды
+    dp.include_router(pvp.router)          # PvP
+    dp.include_router(cops.router)         # тюрьма
     dp.include_router(jobs.router)
     dp.include_router(crime.router)
-    dp.include_router(cops.router)
 
     print("🚀 Бот запущен!")
     await dp.start_polling(bot)
