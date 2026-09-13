@@ -5,4 +5,5 @@ from . import cops
 from . import shop
 from . import inventory
 from . import transport
+from . import home
 from . import menu
