@@ -23,6 +23,7 @@ async def profile(message: Message):
         return
 
     gender = "👨" if player["gender"] == "male" else "👩"
+    need_exp = player["level"] * 100
 
     await message.answer(
         f"👤 <b>{player['nickname']}</b> | {gender}\n"
@@ -33,7 +34,7 @@ async def profile(message: Message):
         f"🔫 Оружие: {player['weapon'] or 'нет'}\n"
         f"🚨 Розыск: {'⭐' * player['wanted'] or '0'}\n\n"
         f"💰 ${player['balance']} | ❤️ {player['hp']}/100\n"
-        f"⭐ Ур.{player['level']} | 📊 {player['exp']}/100",
+        f"⭐ Ур.{player['level']} | 📊 {player['exp']}/{need_exp}",
         reply_markup=profile_kb(),
     )
 
@@ -42,6 +43,7 @@ async def profile(message: Message):
 async def inv_back(callback: CallbackQuery):
     player = await get_player(callback.from_user.id)
     gender = "👨" if player["gender"] == "male" else "👩"
+    need_exp = player["level"] * 100
 
     await callback.message.edit_text(
         f"👤 <b>{player['nickname']}</b> | {gender}\n"
@@ -52,14 +54,14 @@ async def inv_back(callback: CallbackQuery):
         f"🔫 Оружие: {player['weapon'] or 'нет'}\n"
         f"🚨 Розыск: {'⭐' * player['wanted'] or '0'}\n\n"
         f"💰 ${player['balance']} | ❤️ {player['hp']}/100\n"
-        f"⭐ Ур.{player['level']} | 📊 {player['exp']}/100",
+        f"⭐ Ур.{player['level']} | 📊 {player['exp']}/{need_exp}",
         reply_markup=profile_kb(),
     )
     await callback.answer()
 
 
 # ============================================
-# ЛИСТАНИЕ REPLY-МЕНЮ (через regexp — безопасно от эмодзи)
+# ЛИСТАНИЕ REPLY-МЕНЮ
 # ============================================
 @router.message(F.text.regexp(r".*Вперёд.*"))
 async def menu_next(message: Message):
