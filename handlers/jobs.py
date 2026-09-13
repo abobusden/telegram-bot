@@ -194,6 +194,7 @@ async def taxi_menu(callback: CallbackQuery):
             f"🚕 <b>ТАКСИСТ</b>\n\n"
             f"Статус: 🟢 На смене\n"
             f"💰 Заработано: ${state.get('earned', 0)}\n"
+            f"📊 Опыт: +{state.get('exp', 0)}\n"
             f"📦 Заказов: {state.get('orders', 0)}\n"
             f"⏱ За час: {hourly['count']}/10",
             reply_markup=taxi_orders_kb(),
@@ -213,8 +214,8 @@ async def taxi_menu(callback: CallbackQuery):
             status_text = (
                 "🚕 <b>ТАКСИ</b>\n\n"
                 "Работай таксистом:\n"
-                "• Клиент-игрок платит $150\n"
-                "• NPC-клиент платит $200\n\n"
+                "• Клиент-игрок платит $150 (+20 опыта)\n"
+                "• NPC-клиент платит $200 (+15 опыта)\n\n"
                 f"⏱ Лимит: {hourly['count']}/10 заказов в час\n"
                 f"Осталось: {10 - hourly['count']} заказов"
             )
@@ -250,6 +251,7 @@ async def taxi_start_shift(callback: CallbackQuery):
     taxi_state[callback.from_user.id] = {
         "on_shift": True,
         "earned": 0,
+        "exp": 0,
         "orders": 0,
     }
 
@@ -257,6 +259,7 @@ async def taxi_start_shift(callback: CallbackQuery):
         "🚕 <b>ТАКСИСТ</b>\n\n"
         "Статус: 🟢 На смене\n"
         "💰 Заработано: $0\n"
+        "📊 Опыт: +0\n"
         "📦 Заказов: 0\n"
         f"⏱ За час: {hourly['count']}/10\n\n"
         "⏳ Ждём заказ...",
@@ -269,6 +272,7 @@ async def taxi_start_shift(callback: CallbackQuery):
 async def taxi_stop_shift(callback: CallbackQuery):
     state = taxi_state.get(callback.from_user.id, {})
     earned = state.get("earned", 0)
+    exp_gained = state.get("exp", 0)
     orders = state.get("orders", 0)
 
     taxi_state.pop(callback.from_user.id, None)
@@ -279,6 +283,7 @@ async def taxi_stop_shift(callback: CallbackQuery):
     await callback.message.edit_text(
         f"🚕 <b>СМЕНА ЗАВЕРШЕНА</b>\n\n"
         f"💰 Заработано: ${earned}\n"
+        f"📊 Опыт: +{exp_gained}\n"
         f"📦 Заказов: {orders}\n\n"
         f"⏱ За час: {count}/10\n"
         f"Можешь начать новую смену.",
@@ -288,7 +293,7 @@ async def taxi_stop_shift(callback: CallbackQuery):
 
 
 # ============================================
-# NPC-ЗАКАЗ ДЛЯ ТАКСИСТА
+# NPC-ЗАКАЗ ДЛЯ ТАКСИСТА (с опытом!)
 # ============================================
 @router.callback_query(F.data == "taxi_wait_order")
 async def taxi_wait_order(callback: CallbackQuery):
@@ -318,6 +323,7 @@ async def taxi_wait_order(callback: CallbackQuery):
             f"Ты выполнил 10 заказов за час.\n"
             f"⏱ Следующие через: {mins}:{secs:02d}\n\n"
             f"💰 Заработано: ${state.get('earned', 0)}\n"
+            f"📊 Опыт: +{state.get('exp', 0)}\n"
             f"📦 Заказов: {state.get('orders', 0)}",
             reply_markup=back_to_jobs_kb(),
         )
@@ -330,6 +336,7 @@ async def taxi_wait_order(callback: CallbackQuery):
         await callback.answer(f"⏳ Подожди {left} сек", show_alert=True)
         return
 
+    # 20% — клиентов нет
     if random.random() >= 0.8:
         state["last_order"] = now + timedelta(seconds=30)
         taxi_state[callback.from_user.id] = state
@@ -345,13 +352,22 @@ async def taxi_wait_order(callback: CallbackQuery):
         await callback.answer("Клиентов нет")
         return
 
+    # Заказ есть — NPC платит $200 + 15 опыта
     pay = 200
+    exp_gain = 15
+
     player = await get_player(callback.from_user.id)
     new_balance = player["balance"] + pay
+    new_exp = player["exp"] + exp_gain
 
-    await update_player(callback.from_user.id, balance=new_balance)
+    await update_player(
+        callback.from_user.id,
+        balance=new_balance,
+        exp=new_exp,
+    )
 
     state["earned"] = state.get("earned", 0) + pay
+    state["exp"] = state.get("exp", 0) + exp_gain
     state["orders"] = state.get("orders", 0) + 1
     state["last_order"] = now + timedelta(seconds=30)
     taxi_state[callback.from_user.id] = state
@@ -362,7 +378,8 @@ async def taxi_wait_order(callback: CallbackQuery):
     await callback.message.edit_text(
         f"🚕 <b>NPC-ЗАКАЗ</b>\n\n"
         f"👤 Клиент: NPC\n"
-        f"💰 +${pay}\n\n"
+        f"💰 +${pay}\n"
+        f"📊 +{exp_gain} опыта\n\n"
         f"💰 ${state['earned']} | 📦 {state['orders']}\n"
         f"⏱ За час: {hourly['count']}/10\n"
         f"⏱ Следующий через 30 сек",
