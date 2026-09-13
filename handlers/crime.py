@@ -8,8 +8,8 @@ from datetime import datetime, timedelta
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 
-from database import get_player, update_player, add_exp
-from keyboards import crime_menu_kb, back_to_crime_kb
+from database import get_player, update_player, add_exp, add_crime_deal, get_crime_bonus
+from keyboards import crime_menu_kb, back_to_crime_kb, jail_kb
 
 
 router = Router()
@@ -24,7 +24,6 @@ CRIMES = {
         "min_pay": 500,
         "max_pay": 2000,
         "risk_win": 1,
-        "risk_fail": 2,
         "cd": 600,
         "exp": 20,
     },
@@ -34,7 +33,6 @@ CRIMES = {
         "min_pay": 1000,
         "max_pay": 3000,
         "risk_win": 2,
-        "risk_fail": 3,
         "cd": 1200,
         "exp": 30,
     },
@@ -44,7 +42,6 @@ CRIMES = {
         "min_pay": 2000,
         "max_pay": 5000,
         "risk_win": 3,
-        "risk_fail": 4,
         "cd": 1800,
         "exp": 50,
     },
@@ -54,7 +51,6 @@ CRIMES = {
         "min_pay": 10000,
         "max_pay": 20000,
         "risk_win": 4,
-        "risk_fail": 5,
         "cd": 3600,
         "exp": 100,
     },
@@ -73,10 +69,17 @@ async def crime_menu(message: Message):
         await message.answer("Сначала зарегистрируйся: /start")
         return
 
+    crime_level = player.get("crime_level", 1)
+    crime_deals = player.get("crime_deals", 0)
+    bonus = int((get_crime_bonus(crime_level) - 1) * 100)
+
     await message.answer(
         f"⚔️ <b>КРИМИНАЛ</b>\n\n"
         f"📍 Район: {player['district']}\n"
         f"🚨 Розыск: {'⭐' * player['wanted'] or 'чисто'}\n\n"
+        f"🎯 Уровень криминала: <b>{crime_level}/5</b>\n"
+        f"📊 Дел до уровня: {crime_deals}/5\n"
+        f"💰 Бонус к доходу: <b>+{bonus}%</b>\n\n"
         f"Выбери дело:",
         reply_markup=crime_menu_kb(player["level"]),
     )
@@ -89,17 +92,24 @@ async def crime_back(callback: CallbackQuery):
         await callback.answer("Сначала зарегистрируйся")
         return
 
+    crime_level = player.get("crime_level", 1)
+    crime_deals = player.get("crime_deals", 0)
+    bonus = int((get_crime_bonus(crime_level) - 1) * 100)
+
     await callback.message.edit_text(
         f"⚔️ <b>КРИМИНАЛ</b>\n\n"
         f"📍 Район: {player['district']}\n"
-        f"🚨 Розыск: {'⭐' * player['wanted'] or 'чисто'}",
+        f"🚨 Розыск: {'⭐' * player['wanted'] or 'чисто'}\n\n"
+        f"🎯 Уровень криминала: <b>{crime_level}/5</b>\n"
+        f"📊 Дел до уровня: {crime_deals}/5\n"
+        f"💰 Бонус: <b>+{bonus}%</b>",
         reply_markup=crime_menu_kb(player["level"]),
     )
     await callback.answer()
 
 
 # ============================================
-# ВЫПОЛНЕНИЕ ПРЕСТУПЛЕНИЯ
+# ВЫПОЛНЕНИЕ ПРЕСТУПЛЕНИЯ (ВСЕГДА УСПЕХ)
 # ============================================
 @router.callback_query(F.data.startswith("crime_"))
 async def do_crime(callback: CallbackQuery):
@@ -129,66 +139,58 @@ async def do_crime(callback: CallbackQuery):
         await callback.answer(f"⏳ Подожди {mins}:{secs:02d}", show_alert=True)
         return
 
-    # Шанс успеха
-    chance = 60
-    if player["weapon"]:
-        weapon_bonus = {"pistol": 10, "smg": 15, "shotgun": 18, "rifle": 20}
-        chance += weapon_bonus.get(player["weapon"], 0)
-    if player["level"] <= 5:
-        chance += 5
-    elif player["level"] <= 10:
-        chance += 10
-    else:
-        chance += 15
-    chance -= player["wanted"] * 5
-    chance = max(5, min(95, chance))
+    # ============================================
+    # ВСЕГДА УСПЕХ
+    # ============================================
+    base_pay = random.randint(crime["min_pay"], crime["max_pay"])
 
-    success = random.random() * 100 < chance
+    # Бонус от уровня криминала
+    crime_level = player.get("crime_level", 1)
+    bonus_mult = get_crime_bonus(crime_level)
+    pay = int(base_pay * bonus_mult)
+
+    new_wanted = min(5, player["wanted"] + crime["risk_win"])
+    new_balance = player["balance"] + pay
+
+    await update_player(
+        callback.from_user.id,
+        balance=new_balance,
+        wanted=new_wanted,
+    )
+
+    # Опыт
+    exp_result = await add_exp(callback.from_user.id, crime["exp"])
     level_up_text = ""
+    if exp_result and exp_result["levels_up"] > 0:
+        level_up_text = f"\n🎉 <b>УРОВЕНЬ {exp_result['level']}!</b>"
 
-    if success:
-        pay = random.randint(crime["min_pay"], crime["max_pay"])
-        new_wanted = min(5, player["wanted"] + crime["risk_win"])
-        new_balance = player["balance"] + pay
+    # Счётчик криминала
+    crime_result = await add_crime_deal(callback.from_user.id)
+    crime_up_text = ""
+    if crime_result and crime_result["leveled_up"]:
+        crime_up_text = f"\n🔥 <b>УРОВЕНЬ КРИМИНАЛА {crime_result['crime_level']}!</b>"
 
-        await update_player(
-            callback.from_user.id,
-            balance=new_balance,
-            wanted=new_wanted,
-        )
+    bonus_text = ""
+    if crime_level > 1:
+        bonus_text = f"\n💰 Бонус ур.{crime_level}: +{int((bonus_mult - 1) * 100)}%"
 
-        # ✅ Опыт + автоуровень
-        exp_result = await add_exp(callback.from_user.id, crime["exp"])
-        if exp_result and exp_result["levels_up"] > 0:
-            level_up_text = f"\n\n🎉 <b>УРОВЕНЬ {exp_result['level']}!</b>"
-
-        result_text = (
-            f"✅ <b>УСПЕХ!</b>\n\n"
-            f"{crime['name']}\n"
-            f"💰 +${pay}\n"
-            f"📊 +{crime['exp']} опыта\n"
-            f"🚨 Розыск: {'⭐' * new_wanted}"
-        )
-    else:
-        new_wanted = min(5, player["wanted"] + crime["risk_fail"])
-
-        await update_player(callback.from_user.id, wanted=new_wanted)
-
-        result_text = (
-            f"❌ <b>ПРОВАЛ!</b>\n\n"
-            f"{crime['name']}\n"
-            f"🚨 Розыск: {'⭐' * new_wanted}"
-        )
-
+    # Кулдаун
     if callback.from_user.id not in crime_cooldowns:
         crime_cooldowns[callback.from_user.id] = {}
     crime_cooldowns[callback.from_user.id][crime_key] = now + timedelta(seconds=crime["cd"])
 
     await callback.message.edit_text(
-        result_text + level_up_text + f"\n\n⏱ КД: {crime['cd'] // 60} мин",
+        f"✅ <b>УСПЕХ!</b>\n\n"
+        f"{crime['name']}\n"
+        f"💰 +${pay}{bonus_text}\n"
+        f"📊 +{crime['exp']} опыта\n"
+        f"🚨 Розыск: {'⭐' * new_wanted}"
+        f"{level_up_text}"
+        f"{crime_up_text}\n\n"
+        f"⏱ КД: {crime['cd'] // 60} мин",
         reply_markup=back_to_crime_kb(),
     )
-    await callback.answer()
+    await callback.answer("Дело сделано!")
 
     # ============================================
     # ПРОВЕРКА НА ТЮРЬМУ (3+ ⭐)
@@ -208,7 +210,8 @@ async def do_crime(callback: CallbackQuery):
                 f"🚔 <b>ТЕБЯ ПОЙМАЛИ!</b>\n\n"
                 f"🚨 Розыск: {'⭐' * player['wanted']}\n"
                 f"⏱ Срок: {jail_minutes} мин\n\n"
-                f"Жди или зови адвоката",
+                f"Варианты:",
+                reply_markup=jail_kb(),
             )
         else:
             await callback.message.answer(
@@ -225,7 +228,6 @@ jail_data = {}
 
 
 def is_in_jail(telegram_id: int):
-    """Возвращает данные тюрьмы или None."""
     data = jail_data.get(telegram_id)
     if not data:
         return None
