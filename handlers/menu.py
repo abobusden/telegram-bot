@@ -59,9 +59,9 @@ async def inv_back(callback: CallbackQuery):
 
 
 # ============================================
-# ЛИСТАНИЕ REPLY-МЕНЮ (безопасная проверка)
+# ЛИСТАНИЕ REPLY-МЕНЮ (через regexp — безопасно от эмодзи)
 # ============================================
-@router.message(F.text.contains("Вперёд"))
+@router.message(F.text.regexp(r".*Вперёд.*"))
 async def menu_next(message: Message):
     await message.answer(
         "📄 Страница 2/2",
@@ -69,7 +69,7 @@ async def menu_next(message: Message):
     )
 
 
-@router.message(F.text.contains("Назад"))
+@router.message(F.text.regexp(r".*Назад.*"))
 async def menu_back(message: Message):
     await message.answer(
         "📄 Страница 1/2",
