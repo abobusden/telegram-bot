@@ -2,7 +2,8 @@
 # КОПЫ, РОЗЫСК, ТЮРЬМА
 # ============================================
 
-from datetime import datetime
+import random
+from datetime import datetime, timedelta
 
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
@@ -13,13 +14,12 @@ from keyboards import jail_kb
 
 router = Router()
 
-# Импорт из crime.py
 from handlers.crime import jail_data, is_in_jail
 
 
 # ============================================
-# ПРОВЕРКА ТЮРЬМЫ ПРИ КНОПКАХ
-# (хендлер срабатывает ТОЛЬКО если игрок в тюрьме)
+# БЛОК ДЕЙСТВИЙ В ТЮРЬМЕ
+# (срабатывает ТОЛЬКО если игрок реально в тюрьме)
 # ============================================
 @router.message(
     F.text.in_([
@@ -35,7 +35,6 @@ from handlers.crime import jail_data, is_in_jail
     F.func(lambda message: is_in_jail(message.from_user.id) is not None),
 )
 async def block_in_jail(message: Message):
-    """Если игрок в тюрьме — блокируем действия."""
     data = is_in_jail(message.from_user.id)
     if not data:
         return
@@ -88,7 +87,7 @@ async def jail_screen(message: Message):
 
 
 # ============================================
-# АДВОКАТ
+# АДВОКАТ ($2000)
 # ============================================
 @router.callback_query(F.data == "jail_lawyer")
 async def jail_lawyer(callback: CallbackQuery):
@@ -99,31 +98,77 @@ async def jail_lawyer(callback: CallbackQuery):
 
     player = await get_player(callback.from_user.id)
     if not player:
-        await callback.answer("Ошибка данных игрока", show_alert=True)
+        await callback.answer("Ошибка данных")
         return
 
-    current_balance = player.get("balance", 0)
-    if current_balance < 10000:
-        await callback.answer("💰 Нужно $10000", show_alert=True)
+    LAWYER_PRICE = 2000
+
+    if player["balance"] < LAWYER_PRICE:
+        await callback.answer(
+            f"💰 Нужно ${LAWYER_PRICE}. У тебя ${player['balance']}",
+            show_alert=True,
+        )
         return
 
     await update_player(
         callback.from_user.id,
-        balance=current_balance - 10000,
+        balance=player["balance"] - LAWYER_PRICE,
         wanted=0,
     )
     jail_data.pop(callback.from_user.id, None)
 
-    await callback.message.edit_text(
-        text=(
-            "👨‍⚖️ <b>АДВОКАТ</b>\n\n"
-            "💰 -$10000\n"
-            "✅ Ты на свободе!\n"
-            "🚨 Розыск: 0"
-        ),
+    await callback.message.delete()
+    await callback.message.answer(
+        f"👨‍⚖️ <b>АДВОКАТ</b>\n\n"
+        f"💰 -${LAWYER_PRICE}\n"
+        f"✅ Ты на свободе!\n"
+        f"🚨 Розыск: 0",
         parse_mode=ParseMode.HTML,
     )
     await callback.answer("Свобода!")
+
+
+# ============================================
+# ПОБЕГ (30%)
+# ============================================
+@router.callback_query(F.data == "jail_escape")
+async def jail_escape(callback: CallbackQuery):
+    data = is_in_jail(callback.from_user.id)
+    if not data:
+        await callback.answer("Ты не в тюрьме")
+        return
+
+    player = await get_player(callback.from_user.id)
+
+    if random.random() < 0.30:
+        # ✅ Побег удался
+        jail_data.pop(callback.from_user.id, None)
+        await callback.message.delete()
+        await callback.message.answer(
+            f"🏃 <b>ПОБЕГ УДАЛСЯ!</b>\n\n"
+            f"✅ Ты сбежал из тюрьмы!\n"
+            f"🚨 Розыск: {'⭐' * player['wanted']}",
+            parse_mode=ParseMode.HTML,
+        )
+        await callback.answer("Сбежал!")
+    else:
+        # ❌ Побег провалился
+        new_wanted = min(5, player["wanted"] + 1)
+        new_until = data["until"] + timedelta(minutes=15)
+
+        jail_data[callback.from_user.id]["until"] = new_until
+        await update_player(callback.from_user.id, wanted=new_wanted)
+
+        await callback.message.delete()
+        await callback.message.answer(
+            f"❌ <b>ПОБЕГ ПРОВАЛЕН!</b>\n\n"
+            f"🚨 Розыск +1: {'⭐' * new_wanted}\n"
+            f"⏱ Срок +15 мин\n\n"
+            f"Варианты:",
+            reply_markup=jail_kb(),
+            parse_mode=ParseMode.HTML,
+        )
+        await callback.answer("Не вышло...", show_alert=True)
 
 
 # ============================================
@@ -138,7 +183,7 @@ async def jail_wait(callback: CallbackQuery):
 
     if datetime.now() >= data["until"]:
         jail_data.pop(callback.from_user.id, None)
-        await callback.answer("Срок уже истек! Попробуй кнопку заново.", show_alert=True)
+        await callback.answer("Срок истёк! Попробуй нажать заново.", show_alert=True)
         return
 
     left = int((data["until"] - datetime.now()).total_seconds())
