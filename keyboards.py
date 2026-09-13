@@ -10,19 +10,24 @@ from config import FACTIONS, SUPPORT_USERNAME
 
 
 # ============================================
-# REPLY-МЕНЮ (снизу)
+# REPLY-МЕНЮ С ЛИСТАНИЕМ (2 страницы)
 # ============================================
-def main_menu_kb():
-    return ReplyKeyboardMarkup(
-        keyboard=[
+def main_menu_kb(page: int = 1):
+    if page == 2:
+        keyboard = [
+            [KeyboardButton(text="🗺 Карта"), KeyboardButton(text="🏢 Здания")],
+            [KeyboardButton(text="🏆 Топ"), KeyboardButton(text="⚔️ PvP")],
+            [KeyboardButton(text="🚩 Банды"), KeyboardButton(text="🛏 Поспать")],
+            [KeyboardButton(text="⬅️ Назад")],
+        ]
+    else:
+        keyboard = [
             [KeyboardButton(text="👤 Профиль"), KeyboardButton(text="💼 Работа")],
             [KeyboardButton(text="⚔️ Криминал"), KeyboardButton(text="🛒 Магазин")],
             [KeyboardButton(text="🏠 Жильё"), KeyboardButton(text="🚗 Транспорт")],
-            [KeyboardButton(text="🗺 Карта"), KeyboardButton(text="🏢 Здания")],
-            [KeyboardButton(text="🏆 Топ")],
-        ],
-        resize_keyboard=True,
-    )
+            [KeyboardButton(text="➡️ Вперёд")],
+        ]
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 
 # ============================================
@@ -106,15 +111,9 @@ def back_to_jobs_kb():
 def taxi_menu_kb(hourly_count: int = 0):
     buttons = []
     if hourly_count >= 10:
-        buttons.append([InlineKeyboardButton(
-            text="⏳ Лимит исчерпан (10/10)",
-            callback_data="noop",
-        )])
+        buttons.append([InlineKeyboardButton(text="⏳ Лимит исчерпан (10/10)", callback_data="noop")])
     else:
-        buttons.append([InlineKeyboardButton(
-            text=f"🚕 Начать смену ({hourly_count}/10)",
-            callback_data="taxi_start_shift",
-        )])
+        buttons.append([InlineKeyboardButton(text=f"🚕 Начать смену ({hourly_count}/10)", callback_data="taxi_start_shift")])
     buttons.append([InlineKeyboardButton(text="🔙 К работам", callback_data="jobs_back")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -154,10 +153,7 @@ def crime_menu_kb(level: int):
         if level >= lvl:
             buttons.append([InlineKeyboardButton(text=text, callback_data=f"crime_{key}")])
         else:
-            buttons.append([InlineKeyboardButton(
-                text=f"🔒 {text} (ур.{lvl})",
-                callback_data="noop",
-            )])
+            buttons.append([InlineKeyboardButton(text=f"🔒 {text} (ур.{lvl})", callback_data="noop")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -168,7 +164,7 @@ def back_to_crime_kb():
 
 
 # ============================================
-# ТЮРЬМА (адвокат $2000 + побег)
+# ТЮРЬМА
 # ============================================
 def jail_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -260,18 +256,18 @@ def home_menu_kb():
 
 def hotels_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🏨 Мотель — $100/24ч (+2 HP/ч)", callback_data="hotel_motel")],
-        [InlineKeyboardButton(text="🏨 Downtown — $500/24ч (+5 HP/ч)", callback_data="hotel_downtown")],
-        [InlineKeyboardButton(text="🏨 Ritz — $2000/24ч (+10 HP/ч)", callback_data="hotel_ritz")],
+        [InlineKeyboardButton(text="🏨 Мотель — $100/24ч", callback_data="hotel_motel")],
+        [InlineKeyboardButton(text="🏨 Downtown — $500/24ч", callback_data="hotel_downtown")],
+        [InlineKeyboardButton(text="🏨 Ritz — $2000/24ч", callback_data="hotel_ritz")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="home_back")],
     ])
 
 
 def houses_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🏡 Гантон — $5,000 (+5 HP/ч)", callback_data="house_ganton_house")],
-        [InlineKeyboardButton(text="🏰 Особняк — $50,000 (+15 HP/ч)", callback_data="house_mansion")],
-        [InlineKeyboardButton(text="🏢 Бизнес-центр — $500,000 (+$3000/ч)", callback_data="house_business")],
+        [InlineKeyboardButton(text="🏡 Гантон — $5,000", callback_data="house_ganton_house")],
+        [InlineKeyboardButton(text="🏰 Особняк — $50,000", callback_data="house_mansion")],
+        [InlineKeyboardButton(text="🏢 Бизнес-центр — $500,000", callback_data="house_business")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="home_back")],
     ])
 
@@ -279,4 +275,76 @@ def houses_kb():
 def back_to_home_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔙 К жилью", callback_data="home_back")],
+    ])
+
+
+# ============================================
+# БАНДЫ
+# ============================================
+def gang_menu_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 Сменить банду", callback_data="change_gang")],
+        [InlineKeyboardButton(text="🚪 Выйти из банды", callback_data="leave_gang")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="gang_back")],
+    ])
+
+
+def gang_choose_kb():
+    buttons = []
+    for key, data in FACTIONS.items():
+        buttons.append([InlineKeyboardButton(
+            text=f"{data['emoji']} {data['name']} — {data['district']}",
+            callback_data=f"join_gang_{key}",
+        )])
+    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="gang_back")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def back_to_gang_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 К бандам", callback_data="gang_back")],
+    ])
+
+
+# ============================================
+# PVP
+# ============================================
+def pvp_menu_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎯 Найти соперника", callback_data="pvp_search")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="pvp_back")],
+    ])
+
+
+def pvp_back_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 В меню PvP", callback_data="pvp_back")],
+    ])
+
+
+def pvp_opponents_kb(opponents: list):
+    buttons = []
+    for opp in opponents[:5]:
+        buttons.append([InlineKeyboardButton(
+            text=f"👤 {opp['nickname']} (Ур.{opp['level']})",
+            callback_data=f"pvp_opp_{opp['telegram_id']}",
+        )])
+    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="pvp_back")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def pvp_bet_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💰 Ставка $100", callback_data="pvp_bet_100")],
+        [InlineKeyboardButton(text="💰 Ставка $500", callback_data="pvp_bet_500")],
+        [InlineKeyboardButton(text="💰 Ставка $1000", callback_data="pvp_bet_1000")],
+        [InlineKeyboardButton(text="💰 Ставка $5000", callback_data="pvp_bet_5000")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="pvp_back")],
+    ])
+
+
+def pvp_challenge_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⚔️ Начать бой", callback_data="pvp_fight")],
+        [InlineKeyboardButton(text="❌ Отменить", callback_data="pvp_back")],
     ])
