@@ -26,6 +26,9 @@ async def init_db():
                 home TEXT,
                 crime_level INTEGER DEFAULT 1,
                 crime_deals INTEGER DEFAULT 0,
+                gang_cooldown TIMESTAMP,
+                pvp_wins INTEGER DEFAULT 0,
+                pvp_losses INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -76,10 +79,9 @@ async def update_player(telegram_id: int, **fields):
 
 
 # ============================================
-# ОПЫТ + УРОВЕНЬ (общий)
+# ОПЫТ + УРОВЕНЬ
 # ============================================
 async def add_exp(telegram_id: int, amount: int):
-    """Добавляет опыт + авто-повышение уровня. Порог: level * 100"""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
@@ -92,7 +94,6 @@ async def add_exp(telegram_id: int, amount: int):
 
         level = row["level"]
         exp = row["exp"] + amount
-
         levels_up = 0
         while exp >= level * 100:
             exp -= level * 100
@@ -105,25 +106,16 @@ async def add_exp(telegram_id: int, amount: int):
         )
         await db.commit()
 
-        return {
-            "level": level,
-            "exp": exp,
-            "levels_up": levels_up,
-        }
+        return {"level": level, "exp": exp, "levels_up": levels_up}
 
 
 # ============================================
-# УРОВЕНЬ КРИМИНАЛА (1-5)
+# УРОВЕНЬ КРИМИНАЛА
 # ============================================
-CRIME_DEALS_PER_LEVEL = 5   # сколько дел на +1 уровень
+CRIME_DEALS_PER_LEVEL = 5
 
 
 async def add_crime_deal(telegram_id: int):
-    """
-    +1 успешное дело к счётчику.
-    Каждые 5 дел → +1 crime_level.
-    Максимум crime_level = 5.
-    """
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
@@ -136,10 +128,8 @@ async def add_crime_deal(telegram_id: int):
 
         crime_level = row["crime_level"]
         crime_deals = row["crime_deals"] + 1
-
         leveled_up = False
 
-        # Повышение уровня (максимум 5)
         if crime_deals >= CRIME_DEALS_PER_LEVEL and crime_level < 5:
             crime_deals = 0
             crime_level += 1
@@ -159,19 +149,60 @@ async def add_crime_deal(telegram_id: int):
 
 
 def get_crime_bonus(crime_level: int) -> float:
-    """
-    Возвращает множитель дохода по уровню криминала.
-    Ур.1 → 1.0 (0%)
-    Ур.2 → 1.1 (+10%)
-    Ур.3 → 1.2 (+20%)
-    Ур.4 → 1.3 (+30%)
-    Ур.5 → 1.5 (+50%)
-    """
-    bonuses = {
-        1: 1.0,
-        2: 1.1,
-        3: 1.2,
-        4: 1.3,
-        5: 1.5,
-    }
+    bonuses = {1: 1.0, 2: 1.1, 3: 1.2, 4: 1.3, 5: 1.5}
     return bonuses.get(crime_level, 1.0)
+
+
+# ============================================
+# БАНДЫ — КД
+# ============================================
+async def set_gang_cooldown(telegram_id: int, until):
+    await update_player(telegram_id, gang_cooldown=until.isoformat())
+
+
+async def get_gang_cooldown(telegram_id: int):
+    from datetime import datetime
+    player = await get_player(telegram_id)
+    if not player or not player.get("gang_cooldown"):
+        return None
+    try:
+        cd = datetime.fromisoformat(player["gang_cooldown"])
+        if datetime.now() >= cd:
+            await update_player(telegram_id, gang_cooldown=None)
+            return None
+        return cd
+    except:
+        return None
+
+
+# ============================================
+# PVP — статистика
+# ============================================
+async def add_pvp_win(telegram_id: int):
+    player = await get_player(telegram_id)
+    await update_player(telegram_id, pvp_wins=player["pvp_wins"] + 1)
+
+
+async def add_pvp_loss(telegram_id: int):
+    player = await get_player(telegram_id)
+    await update_player(telegram_id, pvp_losses=player["pvp_losses"] + 1)
+
+
+# ============================================
+# ПОИСК ИГРОКОВ ОНЛАЙН (для PvP)
+# ============================================
+async def get_online_players(exclude_id: int, limit: int = 10):
+    """Возвращает список игроков (кроме exclude_id)."""
+    from datetime import datetime, timedelta
+    threshold = datetime.now() - timedelta(minutes=5)
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT * FROM players
+            WHERE telegram_id != ?
+            AND last_active > ?
+            LIMIT ?
+        """, (exclude_id, threshold.isoformat(), limit)) as cur:
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
