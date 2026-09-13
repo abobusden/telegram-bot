@@ -10,7 +10,7 @@ from config import FACTIONS, SUPPORT_USERNAME
 
 
 # ============================================
-# REPLY-МЕНЮ (снизу)
+# REPLY-МЕНЮ
 # ============================================
 def main_menu_kb():
     return ReplyKeyboardMarkup(
@@ -73,14 +73,12 @@ def profile_kb():
 # ============================================
 def jobs_menu_kb(level: int):
     buttons = []
-
     jobs = [
         ("pizza", "🍔 Пицца — $100", 1),
         ("courier", "📦 Курьер — $150", 1),
         ("loader", "🏗 Грузчик — $300", 5),
         ("trucker", "🚚 Дальнобой — $800", 10),
     ]
-
     for key, text, lvl in jobs:
         if level >= lvl:
             buttons.append([InlineKeyboardButton(text=text, callback_data=f"job_{key}")])
@@ -89,9 +87,7 @@ def jobs_menu_kb(level: int):
                 text=f"🔒 {text} (ур.{lvl})",
                 callback_data="noop",
             )])
-
     buttons.append([InlineKeyboardButton(text="🚕 Такси (PvP)", callback_data="taxi_menu")])
-
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -103,18 +99,10 @@ def back_to_jobs_kb():
 
 def taxi_menu_kb(hourly_count: int = 0):
     buttons = []
-
     if hourly_count >= 10:
-        buttons.append([InlineKeyboardButton(
-            text="⏳ Лимит исчерпан (10/10)",
-            callback_data="noop",
-        )])
+        buttons.append([InlineKeyboardButton(text="⏳ Лимит исчерпан (10/10)", callback_data="noop")])
     else:
-        buttons.append([InlineKeyboardButton(
-            text=f"🚕 Начать смену ({hourly_count}/10)",
-            callback_data="taxi_start_shift",
-        )])
-
+        buttons.append([InlineKeyboardButton(text=f"🚕 Начать смену ({hourly_count}/10)", callback_data="taxi_start_shift")])
     buttons.append([InlineKeyboardButton(text="🔙 К работам", callback_data="jobs_back")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -167,9 +155,6 @@ def back_to_crime_kb():
     ])
 
 
-# ============================================
-# ТЮРЬМА
-# ============================================
 def jail_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="👨‍⚖️ Адвокат — $10000", callback_data="jail_lawyer")],
@@ -199,9 +184,6 @@ def shop_back_kb():
     ])
 
 
-# ============================================
-# ИНВЕНТАРЬ
-# ============================================
 def inventory_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔙 Назад", callback_data="inv_back")],
@@ -214,10 +196,8 @@ def inventory_kb():
 def transport_menu_kb(current_car=None):
     buttons = []
     buttons.append([InlineKeyboardButton(text="🏎 Автосалон", callback_data="autosalon")])
-
     if current_car:
         buttons.append([InlineKeyboardButton(text="🏠 Мой гараж", callback_data="garage")])
-
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -234,6 +214,13 @@ def autosalon_kb():
         [InlineKeyboardButton(text="🏍 Спорт-байк — $18,000 (9/10)", callback_data="car_sportbike")],
         [InlineKeyboardButton(text="🚚 Грузовик — $30,000 (+30% грузчик)", callback_data="car_truck")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="transport_back")],
+    ])
+
+
+def car_info_kb(car_key: str):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Купить", callback_data=f"buycar_{car_key}")],
+        [InlineKeyboardButton(text="🔙 Назад в салон", callback_data="autosalon")],
     ])
 
 
