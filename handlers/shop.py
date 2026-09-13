@@ -11,6 +11,9 @@ from keyboards import shop_menu_kb, shop_back_kb
 
 router = Router()
 
+# Хранилище брони (ВВЕРХУ, а не внизу!)
+armor_data = {}
+
 # ============================================
 # ТОВАРЫ
 # ============================================
@@ -77,10 +80,8 @@ async def buy_item(callback: CallbackQuery):
         await callback.answer("💰 Не хватает денег", show_alert=True)
         return
 
-    # Списываем деньги
     new_balance = player["balance"] - item["price"]
 
-    # Логика покупки
     if item["type"] == "weapon":
         await update_player(
             callback.from_user.id,
@@ -91,7 +92,6 @@ async def buy_item(callback: CallbackQuery):
 
     elif item["type"] == "armor":
         await update_player(callback.from_user.id, balance=new_balance)
-        # Броня — в оперативке
         armor_data[callback.from_user.id] = True
         result = f"✅ Куплено: {item['name']}\n+30% защита"
 
@@ -117,7 +117,3 @@ async def buy_item(callback: CallbackQuery):
         reply_markup=shop_back_kb(),
     )
     await callback.answer("Куплено!")
-
-
-# Хранилище брони (в оперативке)
-armor_data = {}
