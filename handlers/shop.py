@@ -4,6 +4,7 @@
 
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
+from aiogram.enums import ParseMode
 
 from database import get_player, update_player
 from keyboards import shop_menu_kb, shop_back_kb
@@ -11,7 +12,7 @@ from keyboards import shop_menu_kb, shop_back_kb
 
 router = Router()
 
-# Хранилище брони (ВВЕРХУ, а не внизу!)
+# Хранилище брони (ВВЕРХУ!)
 armor_data = {}
 
 # ============================================
@@ -40,10 +41,13 @@ async def shop_menu(message: Message):
         return
 
     await message.answer(
-        f"🛒 <b>МАГАЗИН</b>\n\n"
-        f"💰 Баланс: ${player['balance']}\n\n"
-        f"Выбери товар:",
+        text=(
+            f"🛒 <b>МАГАЗИН</b>\n\n"
+            f"💰 Баланс: ${player.get('balance', 0)}\n\n"
+            f"Выбери товар:"
+        ),
         reply_markup=shop_menu_kb(),
+        parse_mode=ParseMode.HTML
     )
 
 
@@ -51,10 +55,13 @@ async def shop_menu(message: Message):
 async def shop_back(callback: CallbackQuery):
     player = await get_player(callback.from_user.id)
     await callback.message.edit_text(
-        f"🛒 <b>МАГАЗИН</b>\n\n"
-        f"💰 Баланс: ${player['balance']}\n\n"
-        f"Выбери товар:",
+        text=(
+            f"🛒 <b>МАГАЗИН</b>\n\n"
+            f"💰 Баланс: ${player.get('balance', 0)}\n\n"
+            f"Выбери товар:"
+        ),
         reply_markup=shop_menu_kb(),
+        parse_mode=ParseMode.HTML
     )
     await callback.answer()
 
@@ -76,11 +83,13 @@ async def buy_item(callback: CallbackQuery):
         await callback.answer("Сначала зарегистрируйся")
         return
 
-    if player["balance"] < item["price"]:
+    current_balance = player.get("balance", 0)
+
+    if current_balance < item["price"]:
         await callback.answer("💰 Не хватает денег", show_alert=True)
         return
 
-    new_balance = player["balance"] - item["price"]
+    new_balance = current_balance - item["price"]
 
     if item["type"] == "weapon":
         await update_player(
@@ -96,7 +105,8 @@ async def buy_item(callback: CallbackQuery):
         result = f"✅ Куплено: {item['name']}\n+30% защита"
 
     elif item["type"] == "heal":
-        new_hp = min(100, player["hp"] + item["hp"])
+        current_hp = player.get("hp", 100)
+        new_hp = min(100, current_hp + item["hp"])
         await update_player(
             callback.from_user.id,
             balance=new_balance,
@@ -113,7 +123,8 @@ async def buy_item(callback: CallbackQuery):
         result = f"✅ {item['name']}\n❤️ HP: 100/100"
 
     await callback.message.edit_text(
-        f"{result}\n\n💰 Баланс: ${new_balance}",
+        text=f"<b>{result}</b>\n\n💰 Баланс: ${new_balance}",
         reply_markup=shop_back_kb(),
+        parse_mode=ParseMode.HTML
     )
     await callback.answer("Куплено!")
