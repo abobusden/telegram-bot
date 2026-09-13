@@ -1,17 +1,20 @@
 # ============================================
-# ПРОФИЛЬ
+# ПРОФИЛЬ + ЛИСТАНИЕ МЕНЮ
 # ============================================
 
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 
 from database import get_player
-from keyboards import profile_kb
+from keyboards import profile_kb, main_menu_kb
 
 
 router = Router()
 
 
+# ============================================
+# ПРОФИЛЬ
+# ============================================
 @router.message(F.text == "👤 Профиль")
 async def profile(message: Message):
     player = await get_player(message.from_user.id)
@@ -35,8 +38,8 @@ async def profile(message: Message):
     )
 
 
-async def profile_screen(callback: CallbackQuery):
-    """Для возврата из инвентаря."""
+@router.callback_query(F.data == "inv_back")
+async def inv_back(callback: CallbackQuery):
     player = await get_player(callback.from_user.id)
     gender = "👨" if player["gender"] == "male" else "👩"
 
@@ -51,4 +54,24 @@ async def profile_screen(callback: CallbackQuery):
         f"💰 ${player['balance']} | ❤️ {player['hp']}/100\n"
         f"⭐ Ур.{player['level']} | 📊 {player['exp']}/100",
         reply_markup=profile_kb(),
+    )
+    await callback.answer()
+
+
+# ============================================
+# ЛИСТАНИЕ REPLY-МЕНЮ
+# ============================================
+@router.message(F.text == "➡️ Вперёд")
+async def menu_next(message: Message):
+    await message.answer(
+        "📄 Страница 2/2",
+        reply_markup=main_menu_kb(page=2),
+    )
+
+
+@router.message(F.text == "⬅️ Назад")
+async def menu_back(message: Message):
+    await message.answer(
+        "📄 Страница 1/2",
+        reply_markup=main_menu_kb(page=1),
     )
