@@ -235,3 +235,36 @@ def back_to_transport_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔙 К транспорту", callback_data="transport_back")],
     ])
+# ============================================
+# ЖИЛЬЁ
+# ============================================
+def home_menu_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🏨 Отели (аренда)", callback_data="hotels_menu")],
+        [InlineKeyboardButton(text="🏡 Дома (навсегда)", callback_data="houses_menu")],
+        [InlineKeyboardButton(text="🛏 Поспать (сброс КД)", callback_data="sleep")],
+    ])
+
+
+def hotels_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🏨 Мотель — $100/24ч (+2 HP/ч)", callback_data="hotel_motel")],
+        [InlineKeyboardButton(text="🏨 Downtown — $500/24ч (+5 HP/ч)", callback_data="hotel_downtown")],
+        [InlineKeyboardButton(text="🏨 Ritz — $2000/24ч (+10 HP/ч)", callback_data="hotel_ritz")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="home_back")],
+    ])
+
+
+def houses_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🏡 Гантон — $5,000 (+5 HP/ч)", callback_data="house_ganton_house")],
+        [InlineKeyboardButton(text="🏰 Особняк — $50,000 (+15 HP/ч)", callback_data="house_mansion")],
+        [InlineKeyboardButton(text="🏢 Бизнес-центр — $500,000 (+$3000/ч)", callback_data="house_business")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="home_back")],
+    ])
+
+
+def back_to_home_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 К жилью", callback_data="home_back")],
+    ])
