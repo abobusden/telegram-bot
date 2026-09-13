@@ -6,7 +6,7 @@ from aiogram.types import Message, CallbackQuery
 
 from config import FACTIONS, DEFAULT_DISTRICT
 from database import get_player, nickname_exists, create_player
-from keyboards import start_kb, gender_kb, faction_kb, to_city_kb, main_menu_kb, profile_kb
+from keyboards import start_kb, gender_kb, faction_kb, to_city_kb, main_menu_kb
 from states import Reg
 
 
@@ -18,10 +18,11 @@ async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
     player = await get_player(message.from_user.id)
     if player:
+        need_exp = player["level"] * 100
         await message.answer(
             f"👋 С возвращением, <b>{player['nickname']}</b>!\n\n"
             f"💰 ${player['balance']} | ❤️ {player['hp']}/100\n"
-            f"⭐ Ур.{player['level']} | 📊 {player['exp']}/100",
+            f"⭐ Ур.{player['level']} | 📊 {player['exp']}/{need_exp}",
             reply_markup=to_city_kb(),
         )
         return
@@ -88,13 +89,14 @@ async def reg_faction(callback: CallbackQuery, state: FSMContext):
     await create_player(callback.from_user.id, data["nickname"], data["gender"], faction, district)
     player = await get_player(callback.from_user.id)
     gender_text = "👨" if player["gender"] == "male" else "👩"
+    need_exp = player["level"] * 100
     await callback.message.edit_text(
         f"✅ <b>ПЕРСОНАЖ СОЗДАН</b>\n\n"
         f"👤 {player['nickname']} | {gender_text}\n"
         f"🚩 Банда: {faction_text}\n"
         f"📍 Район: {player['district']}\n"
         f"💰 ${player['balance']} | ❤️ {player['hp']}\n"
-        f"⭐ Ур.{player['level']} | 📊 {player['exp']}/100",
+        f"⭐ Ур.{player['level']} | 📊 {player['exp']}/{need_exp}",
         reply_markup=to_city_kb(),
     )
     await state.clear()
@@ -104,32 +106,13 @@ async def reg_faction(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "to_city")
 async def to_city(callback: CallbackQuery):
     player = await get_player(callback.from_user.id)
+    need_exp = player["level"] * 100
     await callback.message.delete()
     await callback.message.answer(
         f"👤 {player['nickname']} | 🚩 {player['district']}\n"
         f"💰 ${player['balance']} | ❤️ {player['hp']}/100 | 🚨 {player['wanted']}\n"
-        f"⭐ Ур.{player['level']} | 📊 {player['exp']}/100\n\nВыбери действие:",
-        reply_markup=main_menu_kb(),
+        f"⭐ Ур.{player['level']} | 📊 {player['exp']}/{need_exp}\n\n"
+        f"Выбери действие:",
+        reply_markup=main_menu_kb(page=1),
     )
     await callback.answer()
-
-
-@router.message(F.text == "👤 Профиль")
-async def profile(message: Message):
-    player = await get_player(message.from_user.id)
-    if not player:
-        await message.answer("Сначала зарегистрируйся: /start")
-        return
-    gender = "👨" if player["gender"] == "male" else "👩"
-    await message.answer(
-        f"👤 <b>{player['nickname']}</b> | {gender}\n"
-        f"🚩 Банда: {player['faction'] or 'нет'}\n"
-        f"📍 Район: {player['district']}\n"
-        f"🏠 Жильё: {player['home'] or 'нет'}\n"
-        f"🚗 Машина: {player['car'] or 'нет'}\n"
-        f"🔫 Оружие: {player['weapon'] or 'нет'}\n"
-        f"🚨 Розыск: {player['wanted']}\n\n"
-        f"💰 ${player['balance']} | ❤️ {player['hp']}/100\n"
-        f"⭐ Ур.{player['level']} | 📊 {player['exp']}/100",
-        reply_markup=profile_kb(),
-    )
