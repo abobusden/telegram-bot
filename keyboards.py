@@ -109,3 +109,33 @@ def taxi_cancel_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="❌ Отменить", callback_data="jobs_back")],
     ])
+def crime_menu_kb(level: int):
+    buttons = []
+    crimes = [
+        ("car", "🚗 Угон — $500+", 1),
+        ("shop", "🏪 Грабёж — $1000+", 3),
+        ("drugs", "💊 Наркотики — $2000+", 5),
+        ("bank", "🏦 Банк — $10000+", 10),
+    ]
+    for key, text, lvl in crimes:
+        if level >= lvl:
+            buttons.append([InlineKeyboardButton(text=text, callback_data=f"crime_{key}")])
+        else:
+            buttons.append([InlineKeyboardButton(
+                text=f"🔒 {text} (ур.{lvl})",
+                callback_data="noop",
+            )])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def back_to_crime_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 К криминалу", callback_data="crime_back")],
+    ])
+
+
+def jail_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="👨‍⚖️ Адвокат — $10000", callback_data="jail_lawyer")],
+        [InlineKeyboardButton(text="⏳ Ждать", callback_data="jail_wait")],
+    ])
