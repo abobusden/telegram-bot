@@ -24,6 +24,8 @@ async def init_db():
                 weapon TEXT,
                 car TEXT,
                 home TEXT,
+                crime_level INTEGER DEFAULT 1,
+                crime_deals INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -74,17 +76,10 @@ async def update_player(telegram_id: int, **fields):
 
 
 # ============================================
-# ДОБАВЛЕНИЕ ОПЫТА + АВТО-ПОВЫШЕНИЕ УРОВНЯ
+# ОПЫТ + УРОВЕНЬ (общий)
 # ============================================
 async def add_exp(telegram_id: int, amount: int):
-    """
-    Добавляет опыт и повышает уровень.
-    Порог для ур.N: level * 100
-    Пример:
-      ур.1 → нужно 100 опыта
-      ур.2 → нужно 200 опыта
-      ур.3 → нужно 300 опыта
-    """
+    """Добавляет опыт + авто-повышение уровня. Порог: level * 100"""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
@@ -98,7 +93,6 @@ async def add_exp(telegram_id: int, amount: int):
         level = row["level"]
         exp = row["exp"] + amount
 
-        # Повышение уровня (может быть несколько сразу)
         levels_up = 0
         while exp >= level * 100:
             exp -= level * 100
@@ -115,4 +109,69 @@ async def add_exp(telegram_id: int, amount: int):
             "level": level,
             "exp": exp,
             "levels_up": levels_up,
+        }
+
+
+# ============================================
+# УРОВЕНЬ КРИМИНАЛА (1-5)
+# ============================================
+CRIME_DEALS_PER_LEVEL = 5   # сколько дел на +1 уровень
+
+
+async def add_crime_deal(telegram_id: int):
+    """
+    +1 успешное дело к счётчику.
+    Каждые 5 дел → +1 crime_level.
+    Максимум crime_level = 5.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT crime_level, crime_deals FROM players WHERE telegram_id = ?",
+            (telegram_id,)
+        ) as cur:
+            row = await cur.fetchone()
+            if not row:
+                return None
+
+        crime_level = row["crime_level"]
+        crime_deals = row["crime_deals"] + 1
+
+        leveled_up = False
+
+        # Повышение уровня (максимум 5)
+        if crime_deals >= CRIME_DEALS_PER_LEVEL and crime_level < 5:
+            crime_deals = 0
+            crime_level += 1
+            leveled_up = True
+
+        await db.execute(
+            "UPDATE players SET crime_level = ?, crime_deals = ? WHERE telegram_id = ?",
+            (crime_level, crime_deals, telegram_id)
+        )
+        await db.commit()
+
+        return {
+            "crime_level": crime_level,
+            "crime_deals": crime_deals,
+            "leveled_up": leveled_up,
+        }
+
+
+def get_crime_bonus(crime_level: int) -> float:
+    """
+    Возвращает множитель дохода по уровню криминала.
+    Ур.1 → 1.0 (0%)
+    Ур.2 → 1.1 (+10%)
+    Ур.3 → 1.2 (+20%)
+    Ур.4 → 1.3 (+30%)
+    Ур.5 → 1.5 (+50%)
+    """
+    bonuses = {
+        1: 1.0,
+        2: 1.1,
+        3: 1.2,
+        4: 1.3,
+        5: 1.5,
     }
+    return bonuses.get(crime_level, 1.0)
