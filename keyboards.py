@@ -10,7 +10,7 @@ from config import FACTIONS, SUPPORT_USERNAME
 
 
 # ============================================
-# REPLY-МЕНЮ
+# REPLY-МЕНЮ (снизу)
 # ============================================
 def main_menu_kb():
     return ReplyKeyboardMarkup(
@@ -68,6 +68,12 @@ def profile_kb():
     ])
 
 
+def inventory_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="inv_back")],
+    ])
+
+
 # ============================================
 # РАБОТЫ
 # ============================================
@@ -100,9 +106,15 @@ def back_to_jobs_kb():
 def taxi_menu_kb(hourly_count: int = 0):
     buttons = []
     if hourly_count >= 10:
-        buttons.append([InlineKeyboardButton(text="⏳ Лимит исчерпан (10/10)", callback_data="noop")])
+        buttons.append([InlineKeyboardButton(
+            text="⏳ Лимит исчерпан (10/10)",
+            callback_data="noop",
+        )])
     else:
-        buttons.append([InlineKeyboardButton(text=f"🚕 Начать смену ({hourly_count}/10)", callback_data="taxi_start_shift")])
+        buttons.append([InlineKeyboardButton(
+            text=f"🚕 Начать смену ({hourly_count}/10)",
+            callback_data="taxi_start_shift",
+        )])
     buttons.append([InlineKeyboardButton(text="🔙 К работам", callback_data="jobs_back")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -155,9 +167,13 @@ def back_to_crime_kb():
     ])
 
 
+# ============================================
+# ТЮРЬМА (адвокат $2000 + побег)
+# ============================================
 def jail_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="👨‍⚖️ Адвокат — $10000", callback_data="jail_lawyer")],
+        [InlineKeyboardButton(text="👨‍⚖️ Адвокат — $2000", callback_data="jail_lawyer")],
+        [InlineKeyboardButton(text="🏃 Побег (30%)", callback_data="jail_escape")],
         [InlineKeyboardButton(text="⏳ Ждать", callback_data="jail_wait")],
     ])
 
@@ -181,12 +197,6 @@ def shop_menu_kb():
 def shop_back_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔙 В магазин", callback_data="shop_back")],
-    ])
-
-
-def inventory_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="inv_back")],
     ])
 
 
@@ -235,6 +245,8 @@ def back_to_transport_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔙 К транспорту", callback_data="transport_back")],
     ])
+
+
 # ============================================
 # ЖИЛЬЁ
 # ============================================
