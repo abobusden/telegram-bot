@@ -199,13 +199,29 @@ async def taxi_menu(callback: CallbackQuery):
             reply_markup=taxi_orders_kb(),
         )
     else:
+        left = int((hourly["reset_at"] - now).total_seconds())
+        mins, secs = divmod(left, 60)
+
+        if hourly["count"] >= 10:
+            status_text = (
+                f"⏳ <b>Лимит исчерпан</b>\n\n"
+                f"Ты выполнил 10 заказов за час.\n"
+                f"⏱ Сброс через: {mins}:{secs:02d}\n\n"
+                f"Приходи позже!"
+            )
+        else:
+            status_text = (
+                "🚕 <b>ТАКСИ</b>\n\n"
+                "Работай таксистом:\n"
+                "• Клиент-игрок платит $150\n"
+                "• NPC-клиент платит $200\n\n"
+                f"⏱ Лимит: {hourly['count']}/10 заказов в час\n"
+                f"Осталось: {10 - hourly['count']} заказов"
+            )
+
         await callback.message.edit_text(
-            "🚕 <b>ТАКСИ</b>\n\n"
-            "Работай таксистом:\n"
-            "• Клиент-игрок платит $150\n"
-            "• NPC-клиент платит $200\n\n"
-            f"⏱ Лимит: {hourly['count']}/10 заказов в час",
-            reply_markup=taxi_menu_kb(),
+            status_text,
+            reply_markup=taxi_menu_kb(hourly["count"]),
         )
     await callback.answer()
 
@@ -226,7 +242,7 @@ async def taxi_start_shift(callback: CallbackQuery):
         left = int((hourly["reset_at"] - now).total_seconds())
         mins, secs = divmod(left, 60)
         await callback.answer(
-            f"⏳ Лимит 10 заказов/час. Ждать: {mins}:{secs:02d}",
+            f"⏳ Лимит 10/10. Сброс через: {mins}:{secs:02d}",
             show_alert=True,
         )
         return
@@ -291,7 +307,6 @@ async def taxi_wait_order(callback: CallbackQuery):
         }
         hourly = taxi_hourly[callback.from_user.id]
 
-    # Лимит исчерпан
     if hourly["count"] >= 10:
         left = int((hourly["reset_at"] - now).total_seconds())
         mins, secs = divmod(left, 60)
@@ -309,14 +324,12 @@ async def taxi_wait_order(callback: CallbackQuery):
         await callback.answer("Лимит исчерпан")
         return
 
-    # Кулдаун 30 сек
     last_order = state.get("last_order")
     if last_order and now < last_order:
         left = int((last_order - now).total_seconds())
         await callback.answer(f"⏳ Подожди {left} сек", show_alert=True)
         return
 
-    # Рандом: 20% нет клиентов
     if random.random() >= 0.8:
         state["last_order"] = now + timedelta(seconds=30)
         taxi_state[callback.from_user.id] = state
@@ -332,7 +345,6 @@ async def taxi_wait_order(callback: CallbackQuery):
         await callback.answer("Клиентов нет")
         return
 
-    # Заказ есть — $200
     pay = 200
     player = await get_player(callback.from_user.id)
     new_balance = player["balance"] + pay
@@ -383,7 +395,7 @@ async def taxi_call(callback: CallbackQuery):
 
 
 # ============================================
-# ЗАГЛУШКА ДЛЯ ЗАБЛОКИРОВАННЫХ КНОПОК
+# ЗАГЛУШКА
 # ============================================
 @router.callback_query(F.data == "noop")
 async def noop(callback: CallbackQuery):
