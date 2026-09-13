@@ -9,7 +9,7 @@ from aiogram.enums import ParseMode
 
 from config import BOT_TOKEN
 from database import init_db
-from handlers import start, jobs
+from handlers import start, jobs, crime, cops
 
 
 async def handle(request):
@@ -37,6 +37,8 @@ async def main():
     dp = Dispatcher()
     dp.include_router(start.router)
     dp.include_router(jobs.router)
+    dp.include_router(crime.router)
+    dp.include_router(cops.router)
 
     print("🚀 Бот запущен!")
     await dp.start_polling(bot)
