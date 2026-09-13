@@ -2,7 +2,7 @@
 # КОПЫ, РОЗЫСК, ТЮРЬМА
 # ============================================
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
@@ -11,28 +11,35 @@ from aiogram.enums import ParseMode
 from database import get_player, update_player
 from keyboards import jail_kb
 
-
 router = Router()
 
-# ============================================
-# ИМПОРТ ИЗ crime.py
-# ============================================
+# Импорт из crime.py
 from handlers.crime import jail_data, is_in_jail
 
 
 # ============================================
-# ПРОВЕРКА ТЮРЬМЫ ПРИ ЛЮБОМ ДЕЙСТВИИ
+# ПРОВЕРКА ТЮРЬМЫ ПРИ КНОПКАХ
+# (хендлер срабатывает ТОЛЬКО если игрок в тюрьме)
 # ============================================
-@router.message(F.text.in_(["💼 Работа", "⚔️ Криминал", "🛒 Магазин",
-                            "🚗 Транспорт", "🏠 Жильё", "🗺 Карта",
-                            "🏢 Здания", "🏆 Топ"]))
+@router.message(
+    F.text.in_([
+        "💼 Работа",
+        "⚔️ Криминал",
+        "🛒 Магазин",
+        "🚗 Транспорт",
+        "🏠 Жильё",
+        "🗺 Карта",
+        "🏢 Здания",
+        "🏆 Топ",
+    ]),
+    F.func(lambda message: is_in_jail(message.from_user.id) is not None),
+)
 async def block_in_jail(message: Message):
     """Если игрок в тюрьме — блокируем действия."""
     data = is_in_jail(message.from_user.id)
     if not data:
-        return  # не в тюрьме — пропускаем
+        return
 
-    # Проверяем, не истек ли срок тюрьмы
     if datetime.now() >= data["until"]:
         jail_data.pop(message.from_user.id, None)
         return
@@ -47,7 +54,7 @@ async def block_in_jail(message: Message):
             f"Варианты:"
         ),
         reply_markup=jail_kb(),
-        parse_mode=ParseMode.HTML
+        parse_mode=ParseMode.HTML,
     )
 
 
@@ -76,7 +83,7 @@ async def jail_screen(message: Message):
             f"Варианты:"
         ),
         reply_markup=jail_kb(),
-        parse_mode=ParseMode.HTML
+        parse_mode=ParseMode.HTML,
     )
 
 
@@ -100,7 +107,6 @@ async def jail_lawyer(callback: CallbackQuery):
         await callback.answer("💰 Нужно $10000", show_alert=True)
         return
 
-    # Списываем и освобождаем
     await update_player(
         callback.from_user.id,
         balance=current_balance - 10000,
@@ -115,7 +121,7 @@ async def jail_lawyer(callback: CallbackQuery):
             "✅ Ты на свободе!\n"
             "🚨 Розыск: 0"
         ),
-        parse_mode=ParseMode.HTML
+        parse_mode=ParseMode.HTML,
     )
     await callback.answer("Свобода!")
 
@@ -132,7 +138,7 @@ async def jail_wait(callback: CallbackQuery):
 
     if datetime.now() >= data["until"]:
         jail_data.pop(callback.from_user.id, None)
-        await callback.answer("Срок уже истек! Попробуйте нажать кнопку заново.", show_alert=True)
+        await callback.answer("Срок уже истек! Попробуй кнопку заново.", show_alert=True)
         return
 
     left = int((data["until"] - datetime.now()).total_seconds())
