@@ -56,7 +56,6 @@ DISTRICTS = {
     },
 }
 
-# Матрица расстояний (в минутах)
 DISTANCES = {
     "ganton":    {"idlewood": 3, "east_ls": 6, "el_corona": 4, "downtown": 5, "beach": 8},
     "idlewood":  {"ganton": 3, "east_ls": 5, "el_corona": 3, "downtown": 4, "beach": 7},
@@ -66,7 +65,6 @@ DISTANCES = {
     "beach":     {"ganton": 8, "idlewood": 7, "east_ls": 5, "el_corona": 8, "downtown": 6},
 }
 
-# Множители скорости транспорта
 CAR_MULTIPLIERS = {
     "sedan": 1.5, "truck": 1.5, "minivan": 1.4,
     "suv": 1.2, "chopper": 1.2,
@@ -79,28 +77,19 @@ CAR_MULTIPLIERS = {
 WALK_MULTIPLIER = 2.0
 TAXI_MULTIPLIER = 0.5
 
-# Цены такси
 TAXI_PRICE_NPC = 350
 TAXI_PRICE_PLAYER = 500
 TAXI_CANCEL_PENALTY = 100
 
-# Хранилище поездок (в оперативке)
-active_travels = {}   # {telegram_id: {...}}
+active_travels = {}
 
 
-# ============================================
-# РАСЧЁТ ВРЕМЕНИ
-# ============================================
 def get_travel_time(from_district: str, to_district: str, player: dict) -> float:
-    """Возвращает время поездки в минутах."""
     base = DISTANCES.get(from_district, {}).get(to_district, 5)
-
-    # Множитель транспорта
     if player.get("car"):
         mult = CAR_MULTIPLIERS.get(player["car"], 1.5)
     else:
         mult = WALK_MULTIPLIER
-
     return base * mult
 
 
@@ -150,7 +139,7 @@ async def map_back(callback: CallbackQuery):
 
 
 # ============================================
-# ПЕРЕЕЗД (пешком / на машине)
+# ПЕРЕЕЗД (пешком/машина)
 # ============================================
 @router.callback_query(F.data.startswith("travel_"))
 async def travel(callback: CallbackQuery):
@@ -169,18 +158,16 @@ async def travel(callback: CallbackQuery):
     time_min = get_travel_time(current, to_district, player)
     seconds = int(time_min * 60)
 
-    # Транспорт
     if player.get("car"):
         transport = f"🚗 {player['car']}"
     else:
         transport = "🚶 Пешком"
 
-    # Сохраняем поездку
     active_travels[callback.from_user.id] = {
         "from": current,
         "to": to_district,
         "until": datetime.now() + timedelta(seconds=seconds),
-        "type": "walk",  # или car
+        "type": "walk",
         "started": datetime.now(),
     }
 
@@ -189,20 +176,19 @@ async def travel(callback: CallbackQuery):
         f"📍 {DISTRICTS[current]['name']} → {DISTRICTS[to_district]['name']}\n"
         f"🚗 Транспорт: {transport}\n\n"
         f"⏱ Осталось: {seconds // 60}:{seconds % 60:02d}",
-        reply_markup=travel_cancel_kb() if player.get("car") else None,
+        reply_markup=None,
         parse_mode=ParseMode.HTML,
     )
     await callback.answer()
 
-    # Запускаем обновление таймера
     asyncio.create_task(update_travel_timer(callback.from_user.id, callback.message))
 
 
 # ============================================
-# ТАКСИ
+# ТАКСИ (КАРТА) — map_taxi_menu
 # ============================================
-@router.callback_query(F.data == "taxi_menu")
-async def taxi_menu(callback: CallbackQuery):
+@router.callback_query(F.data == "map_taxi_menu")
+async def map_taxi_menu(callback: CallbackQuery):
     player = await get_player(callback.from_user.id)
     current = player.get("district_key") or "ganton"
 
@@ -229,8 +215,6 @@ async def taxi_to(callback: CallbackQuery):
     time_min = get_taxi_time(current, to_district)
     seconds = int(time_min * 60)
 
-    # Ищем игрока-таксиста (пока заглушка — только NPC)
-    # TODO: реальный поиск игроков
     taxi_type = "npc"
     price = TAXI_PRICE_NPC
 
@@ -238,7 +222,6 @@ async def taxi_to(callback: CallbackQuery):
         await callback.answer(f"💰 Нужно ${price}", show_alert=True)
         return
 
-    # Списываем деньги
     await update_player(callback.from_user.id, balance=player["balance"] - price)
 
     active_travels[callback.from_user.id] = {
@@ -274,7 +257,6 @@ async def travel_cancel(callback: CallbackQuery):
         await callback.answer("Ты не в пути")
         return
 
-    # Только для такси — штраф
     if travel["type"] == "taxi":
         player = await get_player(callback.from_user.id)
         await update_player(
@@ -293,7 +275,7 @@ async def travel_cancel(callback: CallbackQuery):
 
 
 # ============================================
-# ПРИБЫТИЕ
+# ПРОСМОТР РАЙОНА
 # ============================================
 @router.callback_query(F.data == "district_view")
 async def district_view(callback: CallbackQuery):
@@ -314,10 +296,9 @@ async def district_view(callback: CallbackQuery):
 
 
 # ============================================
-# ТАЙМЕР ОБНОВЛЕНИЯ
+# ТАЙМЕР ПОЕЗДКИ
 # ============================================
 async def update_travel_timer(telegram_id: int, message: Message):
-    """Обновляет таймер каждые 20 сек. По окончании — прибытие."""
     while True:
         await asyncio.sleep(20)
 
@@ -327,8 +308,6 @@ async def update_travel_timer(telegram_id: int, message: Message):
 
         now = datetime.now()
         if now >= travel["until"]:
-            # Прибытие
-            player = await get_player(telegram_id)
             await update_player(
                 telegram_id,
                 district_key=travel["to"],
@@ -352,7 +331,6 @@ async def update_travel_timer(telegram_id: int, message: Message):
                 pass
             return
 
-        # Обновляем таймер
         left = int((travel["until"] - now).total_seconds())
         mins, secs = divmod(left, 60)
 
@@ -371,7 +349,7 @@ async def update_travel_timer(telegram_id: int, message: Message):
                     f"🚶 <b>ТЫ В ПУТИ</b>\n\n"
                     f"📍 {DISTRICTS[travel['from']]['name']} → {DISTRICTS[travel['to']]['name']}\n\n"
                     f"⏱ Осталось: {mins}:{secs:02d}",
-                    reply_markup=travel_cancel_kb(),
+                    reply_markup=None,
                     parse_mode=ParseMode.HTML,
                 )
         except:
