@@ -16,6 +16,7 @@ async def init_db():
                 gender TEXT NOT NULL,
                 faction TEXT,
                 district TEXT NOT NULL,
+                district_key TEXT DEFAULT 'ganton',
                 balance INTEGER DEFAULT 500,
                 hp INTEGER DEFAULT 100,
                 level INTEGER DEFAULT 1,
@@ -157,12 +158,10 @@ def get_crime_bonus(crime_level: int) -> float:
 # БАНДЫ — КД
 # ============================================
 async def set_gang_cooldown(telegram_id: int, until):
-    """Сохраняет время, до которого игрок не может вступить в банду."""
     await update_player(telegram_id, gang_cooldown=until.isoformat())
 
 
 async def get_gang_cooldown(telegram_id: int):
-    """Возвращает datetime кулдауна или None, если КД нет."""
     from datetime import datetime
     player = await get_player(telegram_id)
     if not player or not player.get("gang_cooldown"):
@@ -190,11 +189,7 @@ async def add_pvp_loss(telegram_id: int):
     await update_player(telegram_id, pvp_losses=player["pvp_losses"] + 1)
 
 
-# ============================================
-# ПОИСК ИГРОКОВ ОНЛАЙН (для PvP)
-# ============================================
 async def get_online_players(exclude_id: int, limit: int = 10):
-    """Возвращает список игроков (кроме exclude_id)."""
     from datetime import datetime, timedelta
     threshold = datetime.now() - timedelta(minutes=5)
 
