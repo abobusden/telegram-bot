@@ -10,7 +10,7 @@ from config import FACTIONS, SUPPORT_USERNAME
 
 
 # ============================================
-# REPLY-МЕНЮ С ЛИСТАНИЕМ (2 страницы)
+# REPLY-МЕНЮ (2 страницы)
 # ============================================
 def main_menu_kb(page: int = 1):
     if page == 2:
@@ -347,4 +347,84 @@ def pvp_challenge_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⚔️ Начать бой", callback_data="pvp_fight")],
         [InlineKeyboardButton(text="❌ Отменить", callback_data="pvp_back")],
+    ])
+
+
+# ============================================
+# КАРТА
+# ============================================
+def map_menu_kb(current: str, player: dict):
+    buttons = []
+
+    districts_order = ["ganton", "idlewood", "east_ls", "el_corona", "downtown", "beach"]
+    for key in districts_order:
+        if key == current:
+            continue
+
+        from handlers.city_map import DISTANCES, DISTRICTS
+
+        base = DISTANCES.get(current, {}).get(key, 5)
+
+        if player.get("car"):
+            from handlers.city_map import CAR_MULTIPLIERS
+            mult = CAR_MULTIPLIERS.get(player["car"], 1.5)
+        else:
+            from handlers.city_map import WALK_MULTIPLIER
+            mult = WALK_MULTIPLIER
+
+        time_min = base * mult
+        time_str = f"{time_min:.1f}м" if time_min < 10 else f"{int(time_min)}м"
+
+        name = DISTRICTS[key]["name"]
+
+        buttons.append([InlineKeyboardButton(
+            text=f"{name} — {time_str}",
+            callback_data=f"travel_{key}",
+        )])
+
+    buttons.append([InlineKeyboardButton(text="🚕 Вызвать такси", callback_data="taxi_menu")])
+    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="to_city")])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def travel_taxi_kb(current: str):
+    buttons = []
+    districts_order = ["ganton", "idlewood", "east_ls", "el_corona", "downtown", "beach"]
+
+    from handlers.city_map import DISTRICTS, get_taxi_time
+
+    for key in districts_order:
+        if key == current:
+            continue
+
+        time_min = get_taxi_time(current, key)
+        time_str = f"{time_min:.1f}м" if time_min < 10 else f"{int(time_min)}м"
+        name = DISTRICTS[key]["name"]
+
+        buttons.append([InlineKeyboardButton(
+            text=f"{name} — {time_str}",
+            callback_data=f"taxi_to_{key}",
+        )])
+
+    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="map_back")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def travel_cancel_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отменить поездку", callback_data="travel_cancel")],
+    ])
+
+
+def district_view_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🗺 Карта", callback_data="map_back")],
+        [InlineKeyboardButton(text="🔙 В город", callback_data="to_city")],
+    ])
+
+
+def back_to_map_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 К карте", callback_data="map_back")],
     ])
