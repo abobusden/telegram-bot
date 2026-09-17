@@ -361,15 +361,13 @@ def map_menu_kb(current: str, player: dict):
         if key == current:
             continue
 
-        from handlers.city_map import DISTANCES, DISTRICTS
+        from handlers.city_map import DISTANCES, DISTRICTS, CAR_MULTIPLIERS, WALK_MULTIPLIER
 
         base = DISTANCES.get(current, {}).get(key, 5)
 
         if player.get("car"):
-            from handlers.city_map import CAR_MULTIPLIERS
             mult = CAR_MULTIPLIERS.get(player["car"], 1.5)
         else:
-            from handlers.city_map import WALK_MULTIPLIER
             mult = WALK_MULTIPLIER
 
         time_min = base * mult
@@ -382,7 +380,7 @@ def map_menu_kb(current: str, player: dict):
             callback_data=f"travel_{key}",
         )])
 
-    buttons.append([InlineKeyboardButton(text="🚕 Вызвать такси", callback_data="taxi_menu")])
+    buttons.append([InlineKeyboardButton(text="🚕 Вызвать такси", callback_data="map_taxi_menu")])
     buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="to_city")])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
