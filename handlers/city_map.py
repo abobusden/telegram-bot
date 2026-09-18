@@ -1,5 +1,5 @@
 # ============================================
-# КАРТА (перемещение между районами)
+# КАРТА + ЗДАНИЯ
 # ============================================
 
 import asyncio
@@ -14,6 +14,10 @@ from handlers.crime import is_in_jail
 from keyboards import (
     map_menu_kb, travel_taxi_kb, travel_cancel_kb,
     district_view_kb, back_to_map_kb,
+    shop_menu_kb, hospital_menu_kb, hospital_back_kb,
+    bank_menu_kb, bank_create_kb,
+    arsenal_menu_kb, autoservice_menu_kb, autoservice_back_kb,
+    casino_menu_kb, race_menu_kb, home_menu_kb, transport_menu_kb,
 )
 
 
@@ -27,32 +31,58 @@ DISTRICTS = {
     "ganton": {
         "name": "🟢 Ganton",
         "faction": "Grove Street",
-        "buildings": ["🏪 Магазин 24/7", "🏥 Больница", "🏨 Мотель"],
+        "buildings": [
+            {"name": "🏪 Магазин 24/7", "callback": "open_shop"},
+            {"name": "🏥 Больница", "callback": "open_hospital"},
+            {"name": "🏨 Мотель", "callback": "open_home"},
+        ],
     },
     "idlewood": {
         "name": "🟣 Idlewood",
         "faction": "Ballas",
-        "buildings": ["🏪 Магазин 24/7", "🏥 Больница", "🔫 Арсенал"],
+        "buildings": [
+            {"name": "🏪 Магазин 24/7", "callback": "open_shop"},
+            {"name": "🏥 Больница", "callback": "open_hospital"},
+            {"name": "🔫 Арсенал", "callback": "open_arsenal"},
+        ],
     },
     "east_ls": {
         "name": "🔵 East LS",
         "faction": "Los Vagos",
-        "buildings": ["🏪 Магазин 24/7", "🔧 Автосервис", "🏁 Трек"],
+        "buildings": [
+            {"name": "🏪 Магазин 24/7", "callback": "open_shop"},
+            {"name": "🔧 Автосервис", "callback": "open_autoservice"},
+            {"name": "🏁 Трек", "callback": "open_race"},
+        ],
     },
     "el_corona": {
         "name": "⚪ El Corona",
         "faction": "Ацтеки",
-        "buildings": ["🏪 Магазин 24/7", "🏥 Больница", "🏨 Отель"],
+        "buildings": [
+            {"name": "🏪 Магазин 24/7", "callback": "open_shop"},
+            {"name": "🏥 Больница", "callback": "open_hospital"},
+            {"name": "🏨 Отель", "callback": "open_home"},
+        ],
     },
     "downtown": {
         "name": "💼 Downtown",
         "faction": "Нейтрал",
-        "buildings": ["🏪 Магазин 24/7", "🏥 Больница", "🏦 Банк", "🔫 Арсенал", "🚗 Автосалон"],
+        "buildings": [
+            {"name": "🏪 Магазин 24/7", "callback": "open_shop"},
+            {"name": "🏥 Больница", "callback": "open_hospital"},
+            {"name": "🏦 Банк", "callback": "open_bank"},
+            {"name": "🔫 Арсенал", "callback": "open_arsenal"},
+            {"name": "🚗 Автосалон", "callback": "open_transport"},
+        ],
     },
     "beach": {
         "name": "🏖 Пляж",
         "faction": "Нейтрал",
-        "buildings": ["🏪 Магазин 24/7", "🎰 Казино", "🏁 Трек"],
+        "buildings": [
+            {"name": "🏪 Магазин 24/7", "callback": "open_shop"},
+            {"name": "🎰 Казино", "callback": "open_casino"},
+            {"name": "🏁 Трек", "callback": "open_race"},
+        ],
     },
 }
 
@@ -77,7 +107,6 @@ CAR_MULTIPLIERS = {
 WALK_MULTIPLIER = 2.0
 TAXI_MULTIPLIER = 0.5
 
-# Двигатель и нитро
 ENGINE_MULTIPLIERS = {0: 1.0, 1: 0.9, 2: 0.8, 3: 0.7}
 NITRO_MULTIPLIER = 0.7
 
@@ -287,7 +316,7 @@ async def taxi_to(callback: CallbackQuery):
 
 
 # ============================================
-# ОТМЕНА
+# ОТМЕНА ПОЕЗДКИ
 # ============================================
 @router.callback_query(F.data == "travel_cancel")
 async def travel_cancel(callback: CallbackQuery):
@@ -314,7 +343,7 @@ async def travel_cancel(callback: CallbackQuery):
 
 
 # ============================================
-# ПРОСМОТР РАЙОНА
+# ПРОСМОТР РАЙОНА (с кнопками зданий)
 # ============================================
 @router.callback_query(F.data == "district_view")
 async def district_view(callback: CallbackQuery):
@@ -322,20 +351,255 @@ async def district_view(callback: CallbackQuery):
     current = player.get("district_key") or "ganton"
     district = DISTRICTS[current]
 
-    buildings_text = "\n".join(f"[ {b} ]" for b in district["buildings"])
+    buttons = []
+    for b in district["buildings"]:
+        buttons.append([InlineKeyboardButton(text=b["name"], callback_data=b["callback"])])
+
+    buttons.append([InlineKeyboardButton(text="🗺 Карта", callback_data="map_back")])
+    buttons.append([InlineKeyboardButton(text="🔙 В город", callback_data="to_city")])
 
     await callback.message.edit_text(
         f"📍 <b>ТЫ В: {district['name']}</b>\n\n"
         f"🚩 Территория: {district['faction']}\n\n"
-        f"🏢 Здания:\n{buildings_text}",
-        reply_markup=district_view_kb(),
+        f"🏢 Здания:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
         parse_mode=ParseMode.HTML,
     )
     await callback.answer()
 
 
 # ============================================
-# ТАЙМЕР
+# КНОПКА «ЗДАНИЯ» — текущий район
+# ============================================
+@router.message(F.text == "🏢 Здания")
+async def buildings_menu(message: Message):
+    player = await get_player(message.from_user.id)
+    if not player:
+        await message.answer("Сначала зарегистрируйся: /start")
+        return
+
+    current = player.get("district_key") or "ganton"
+    district = DISTRICTS[current]
+
+    if not district.get("buildings"):
+        await message.answer(
+            f"🏢 <b>ЗДАНИЯ</b>\n\n"
+            f"📍 Район: {district['name']}\n\n"
+            f"В этом районе нет зданий.",
+            reply_markup=back_to_map_kb(),
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    buttons = []
+    for b in district["buildings"]:
+        buttons.append([InlineKeyboardButton(text=b["name"], callback_data=b["callback"])])
+    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="to_city")])
+
+    await message.answer(
+        f"🏢 <b>ЗДАНИЯ</b>\n\n"
+        f"📍 Район: {district['name']}\n\n"
+        f"Выбери здание:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+        parse_mode=ParseMode.HTML,
+    )
+
+
+# ============================================
+# ХЕНДЛЕРЫ ОТКРЫТИЯ ЗДАНИЙ
+# ============================================
+@router.callback_query(F.data == "open_shop")
+async def open_shop(callback: CallbackQuery):
+    player = await get_player(callback.from_user.id)
+    await callback.message.delete()
+    await callback.message.answer(
+        f"🏪 <b>МАГАЗИН 24/7</b>\n\n"
+        f"💰 Баланс: ${player['balance']}\n"
+        f"❤️ HP: {player['hp']}/100\n\n"
+        f"Выбери товар:",
+        reply_markup=shop_menu_kb(),
+        parse_mode=ParseMode.HTML,
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "open_hospital")
+async def open_hospital(callback: CallbackQuery):
+    player = await get_player(callback.from_user.id)
+
+    if player["hp"] >= 100:
+        await callback.message.delete()
+        await callback.message.answer(
+            f"🏥 <b>БОЛЬНИЦА</b>\n\n"
+            f"❤️ HP: {player['hp']}/100\n\n"
+            f"Ты здоров! Лечение не нужно.",
+            reply_markup=hospital_back_kb(),
+            parse_mode=ParseMode.HTML,
+        )
+    else:
+        text = (
+            f"🏥 <b>БОЛЬНИЦА</b>\n\n"
+            f"❤️ Твоё HP: {player['hp']}/100\n\n"
+            f"💰 Лечение: $500\n"
+            f"❤️ Восстановит: 100/100\n"
+        )
+        if player["balance"] < 500:
+            text += f"\n❌ <b>Не хватает денег!</b>\n💰 У тебя: ${player['balance']}"
+
+        await callback.message.delete()
+        await callback.message.answer(
+            text,
+            reply_markup=hospital_menu_kb(player["balance"], player["hp"]),
+            parse_mode=ParseMode.HTML,
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "open_bank")
+async def open_bank(callback: CallbackQuery):
+    player = await get_player(callback.from_user.id)
+
+    if not player.get("bank_account"):
+        await callback.message.delete()
+        await callback.message.answer(
+            f"🏦 <b>БАНК</b>\n\n"
+            f"У тебя нет банковского счёта.\n\n"
+            f"Создать счёт?",
+            reply_markup=bank_create_kb(),
+            parse_mode=ParseMode.HTML,
+        )
+    else:
+        bank_balance = player.get("bank_balance", 0) or 0
+        deposit = player.get("bank_deposit", 0) or 0
+        await callback.message.delete()
+        await callback.message.answer(
+            f"🏦 <b>БАНК</b>\n\n"
+            f"💳 Счёт: <code>{player['bank_account']}</code>\n"
+            f"💰 На счёте: ${bank_balance}\n"
+            f"💼 Вклад: ${deposit}",
+            reply_markup=bank_menu_kb(bank_balance, deposit),
+            parse_mode=ParseMode.HTML,
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "open_arsenal")
+async def open_arsenal(callback: CallbackQuery):
+    player = await get_player(callback.from_user.id)
+    weapon = player.get("weapon") or "нет"
+
+    await callback.message.delete()
+    await callback.message.answer(
+        f"🔫 <b>АРСЕНАЛ</b>\n\n"
+        f"💰 Баланс: ${player['balance']}\n"
+        f"🔫 Оружие: {weapon}\n\n"
+        f"Выбери товар:",
+        reply_markup=arsenal_menu_kb(),
+        parse_mode=ParseMode.HTML,
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "open_autoservice")
+async def open_autoservice(callback: CallbackQuery):
+    player = await get_player(callback.from_user.id)
+
+    if not player.get("car"):
+        await callback.message.delete()
+        await callback.message.answer(
+            f"🔧 <b>АВТОСЕРВИС</b>\n\n"
+            f"❌ У тебя нет машины!\n\n"
+            f"Сначала купи машину в автосалоне.",
+            reply_markup=autoservice_back_kb(),
+            parse_mode=ParseMode.HTML,
+        )
+    else:
+        engine = player.get("engine_level", 0)
+        nitro = player.get("nitro", 0)
+        nitro_text = "да" if nitro else "нет"
+
+        await callback.message.delete()
+        await callback.message.answer_photo(
+            photo="https://i.ibb.co/ns0ZMzHf/Screenshot-20260918-175758.jpg",
+            caption=(
+                f"🔧 <b>АВТОСЕРВИС</b>\n\n"
+                f"🚗 Машина: {player['car']}\n"
+                f"🔧 Двигатель: ур.{engine}\n"
+                f"💨 Нитро: {nitro_text}\n\n"
+                f"💰 Баланс: ${player['balance']}"
+            ),
+            reply_markup=autoservice_menu_kb(engine, nitro),
+            parse_mode=ParseMode.HTML,
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "open_casino")
+async def open_casino(callback: CallbackQuery):
+    player = await get_player(callback.from_user.id)
+
+    await callback.message.delete()
+    await callback.message.answer(
+        f"🎰 <b>КАЗИНО</b>\n\n"
+        f"💰 Баланс: ${player['balance']}\n\n"
+        f"Выбери игру:",
+        reply_markup=casino_menu_kb(),
+        parse_mode=ParseMode.HTML,
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "open_race")
+async def open_race(callback: CallbackQuery):
+    player = await get_player(callback.from_user.id)
+    car = player.get("car")
+    car_name = car if car else "нет"
+
+    await callback.message.delete()
+    await callback.message.answer_photo(
+        photo="https://i.ibb.co/M5x6W1Ty/Screenshot-20260918-141348.jpg",
+        caption=(
+            f"🏁 <b>ТРЕК</b>\n\n"
+            f"📍 Район: {player['district']}\n"
+            f"🚗 Машина: {car_name}\n\n"
+            f"Добро пожаловать на гонки!"
+        ),
+        reply_markup=race_menu_kb(),
+        parse_mode=ParseMode.HTML,
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "open_home")
+async def open_home(callback: CallbackQuery):
+    player = await get_player(callback.from_user.id)
+
+    await callback.message.delete()
+    await callback.message.answer(
+        f"🏨 <b>ЖИЛЬЁ</b>\n\n"
+        f"💰 Баланс: ${player['balance']}",
+        reply_markup=home_menu_kb(),
+        parse_mode=ParseMode.HTML,
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "open_transport")
+async def open_transport(callback: CallbackQuery):
+    player = await get_player(callback.from_user.id)
+
+    await callback.message.delete()
+    await callback.message.answer(
+        f"🚗 <b>АВТОСАЛОН</b>\n\n"
+        f"💰 Баланс: ${player['balance']}",
+        reply_markup=transport_menu_kb(player.get("car")),
+        parse_mode=ParseMode.HTML,
+    )
+    await callback.answer()
+
+
+# ============================================
+# ТАЙМЕР ПОЕЗДКИ
 # ============================================
 async def update_travel_timer(telegram_id: int, message: Message):
     while True:
@@ -355,15 +619,20 @@ async def update_travel_timer(telegram_id: int, message: Message):
             active_travels.pop(telegram_id, None)
 
             district = DISTRICTS[travel["to"]]
-            buildings_text = "\n".join(f"[ {b} ]" for b in district["buildings"])
+
+            buttons = []
+            for b in district["buildings"]:
+                buttons.append([InlineKeyboardButton(text=b["name"], callback_data=b["callback"])])
+            buttons.append([InlineKeyboardButton(text="🗺 Карта", callback_data="map_back")])
+            buttons.append([InlineKeyboardButton(text="🔙 В город", callback_data="to_city")])
 
             try:
                 await message.edit_text(
                     f"✅ <b>ТЫ ПРИБЫЛ!</b>\n\n"
                     f"📍 Ты в: {district['name']}\n"
                     f"🚩 Территория: {district['faction']}\n\n"
-                    f"🏢 Здания:\n{buildings_text}",
-                    reply_markup=district_view_kb(),
+                    f"🏢 Здания:",
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
                     parse_mode=ParseMode.HTML,
                 )
             except:
