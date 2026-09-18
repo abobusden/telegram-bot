@@ -530,3 +530,46 @@ def bank_confirm_transfer_kb(account: str, name: str, amount: int):
         )],
         [InlineKeyboardButton(text="❌ Отказаться", callback_data="bank_back")],
     ])
+# ============================================
+# БАНК
+# ============================================
+def bank_create_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Создать счёт", callback_data="bank_create")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="bank_back")],
+    ])
+
+
+def bank_menu_kb(bank_balance: int, deposit: int):
+    buttons = [
+        [InlineKeyboardButton(text="💸 Перевести на счёт", callback_data="bank_transfer")],
+        [InlineKeyboardButton(text="📥 Пополнить счёт", callback_data="bank_topup")],
+    ]
+
+    if bank_balance > 0:
+        buttons.append([InlineKeyboardButton(text="💸 Снять со счёта", callback_data="bank_withdraw_acc")])
+
+    buttons.append([InlineKeyboardButton(text="📈 Вложить под 5%", callback_data="bank_deposit")])
+
+    if deposit > 0:
+        buttons.append([InlineKeyboardButton(text="💸 Снять вклад", callback_data="bank_withdraw_dep")])
+
+    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="bank_back")])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def bank_back_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 В банк", callback_data="bank_back")],
+    ])
+
+
+def bank_confirm_transfer_kb(account: str, name: str, amount: int):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="✅ Подтвердить",
+            callback_data=f"bank_confirm_{account}_{amount}",
+        )],
+        [InlineKeyboardButton(text="❌ Отказаться", callback_data="bank_back")],
+    ])
