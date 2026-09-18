@@ -175,23 +175,39 @@ def jail_kb():
 
 
 # ============================================
-# МАГАЗИН (без лечения!)
+# МАГАЗИН (без оружия и лечения!)
 # ============================================
 def shop_menu_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔫 Пистолет — $500 (+10%)", callback_data="buy_pistol")],
-        [InlineKeyboardButton(text="🔫🔫 SMG — $2000 (+15%)", callback_data="buy_smg")],
-        [InlineKeyboardButton(text="🎯 Дробовик — $3500 (+18%)", callback_data="buy_shotgun")],
-        [InlineKeyboardButton(text="💥 Автомат — $8000 (+20%)", callback_data="buy_rifle")],
-        [InlineKeyboardButton(text="🛡 Броня — $1500 (+30%)", callback_data="buy_armor")],
-        [InlineKeyboardButton(text="💊 Аптечка — $300 (+50 HP)", callback_data="buy_medkit")],
         [InlineKeyboardButton(text="🍔 Еда — $50 (+20 HP)", callback_data="buy_food")],
+        [InlineKeyboardButton(text="💊 Аптечка — $300 (+50 HP)", callback_data="buy_medkit")],
+        [InlineKeyboardButton(text="🥤 Вода — $20 (+5 HP)", callback_data="buy_water")],
+        [InlineKeyboardButton(text="☕ Кофе — $200 (сброс КД)", callback_data="buy_coffee")],
     ])
 
 
 def shop_back_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔙 В магазин", callback_data="shop_back")],
+    ])
+
+
+# ============================================
+# АРСЕНАЛ
+# ============================================
+def arsenal_menu_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔫 Пистолет — $500 (+10%)", callback_data="buy_pistol")],
+        [InlineKeyboardButton(text="🔫🔫 SMG — $2000 (+15%)", callback_data="buy_smg")],
+        [InlineKeyboardButton(text="🎯 Дробовик — $3500 (+18%)", callback_data="buy_shotgun")],
+        [InlineKeyboardButton(text="💥 Автомат — $8000 (+20%)", callback_data="buy_rifle")],
+        [InlineKeyboardButton(text="🛡 Броня — $1500 (+30%)", callback_data="buy_armor")],
+    ])
+
+
+def arsenal_back_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 В арсенал", callback_data="arsenal_back")],
     ])
 
 
@@ -206,7 +222,25 @@ def transport_menu_kb(current_car=None):
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def autosalon_kb():
+def autosalon_categories_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🏍 A — Мотоциклы", callback_data="autosalon_a")],
+        [InlineKeyboardButton(text="🚗 B — Легковые", callback_data="autosalon_b")],
+        [InlineKeyboardButton(text="🚚 C — Грузовые", callback_data="autosalon_c")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="transport_back")],
+    ])
+
+
+def autosalon_a_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🏍 Мотоцикл — $8,000 (6/10)", callback_data="car_moto")],
+        [InlineKeyboardButton(text="🏍 Чоппер — $15,000 (5/10)", callback_data="car_chopper")],
+        [InlineKeyboardButton(text="🏍 Спорт-байк — $18,000 (9/10)", callback_data="car_sportbike")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="autosalon")],
+    ])
+
+
+def autosalon_b_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🚗 Sedan — $5,000 (3/10)", callback_data="car_sedan")],
         [InlineKeyboardButton(text="🚐 Минивэн — $8,000 (4/10)", callback_data="car_minivan")],
@@ -214,18 +248,27 @@ def autosalon_kb():
         [InlineKeyboardButton(text="🏎 Спорткар — $25,000 (9/10)", callback_data="car_sportcar")],
         [InlineKeyboardButton(text="🏎 Тюнингованная — $35,000 (8/10)", callback_data="car_tuned")],
         [InlineKeyboardButton(text="🏎 Суперкар — $50,000 (10/10)", callback_data="car_supercar")],
-        [InlineKeyboardButton(text="🏍 Мотоцикл — $8,000 (6/10)", callback_data="car_moto")],
-        [InlineKeyboardButton(text="🏍 Чоппер — $15,000 (5/10)", callback_data="car_chopper")],
-        [InlineKeyboardButton(text="🏍 Спорт-байк — $18,000 (9/10)", callback_data="car_sportbike")],
-        [InlineKeyboardButton(text="🚚 Грузовик — $30,000 (+30% грузчик)", callback_data="car_truck")],
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="transport_back")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="autosalon")],
     ])
 
 
-def car_info_kb(car_key: str):
+def autosalon_c_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🚚 Грузовик — $30,000 (+30% грузчик)", callback_data="car_truck")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="autosalon")],
+    ])
+
+
+def car_info_kb(car_key: str, category: str):
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✅ Купить", callback_data=f"buycar_{car_key}")],
-        [InlineKeyboardButton(text="🔙 Назад в салон", callback_data="autosalon")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data=f"autosalon_{category.lower()}")],
+    ])
+
+
+def back_to_autosalon_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 К автосалону", callback_data="autosalon")],
     ])
 
 
