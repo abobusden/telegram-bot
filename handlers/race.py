@@ -39,9 +39,6 @@ CAR_SPEEDS = {
 ENGINE_BONUS = {0: 0, 1: 0.5, 2: 1.0, 3: 1.5}
 
 
-# ============================================
-# МЕНЮ ТРЕКА
-# ============================================
 @router.message(F.text == "🏁 Трек")
 async def race_menu(message: Message):
     player = await get_player(message.from_user.id)
@@ -86,9 +83,6 @@ async def race_back(callback: CallbackQuery):
     await callback.answer()
 
 
-# ============================================
-# БЫСТРЫЙ ЗАЕЗД — ставка
-# ============================================
 @router.callback_query(F.data == "race_fast")
 async def race_fast(callback: CallbackQuery, state: FSMContext):
     player = await get_player(callback.from_user.id)
@@ -148,9 +142,6 @@ async def process_bet(message: Message, state: FSMContext):
     )
 
 
-# ============================================
-# СТАРТ ЗАЕЗДА
-# ============================================
 @router.callback_query(F.data.startswith("race_start_"))
 async def race_start(callback: CallbackQuery):
     bet = int(callback.data.replace("race_start_", ""))
@@ -160,10 +151,8 @@ async def race_start(callback: CallbackQuery):
         await callback.answer("💰 Не хватает денег", show_alert=True)
         return
 
-    # Списываем ставку
     await update_player(callback.from_user.id, balance=player["balance"] - bet)
 
-    # Считаем время
     car_speed = CAR_SPEEDS.get(player.get("car"), 3)
     engine_bonus = ENGINE_BONUS.get(player.get("engine_level", 0), 0)
     nitro_bonus = 1 if player.get("nitro", 0) else 0
@@ -172,7 +161,6 @@ async def race_start(callback: CallbackQuery):
     npc_speed = random.randint(3, 7)
     npc_time = 20 - npc_speed + random.uniform(-2, 2)
 
-    # Прогресс
     await callback.message.delete()
     msg = await callback.message.answer(
         f"🏁 <b>ЗАЕЗД...</b>\n\n"
@@ -202,18 +190,23 @@ async def race_start(callback: CallbackQuery):
 
     await asyncio.sleep(1)
 
-    # Результат
     player_time = round(player_time, 1)
     npc_time = round(npc_time, 1)
 
+    from handlers.events import get_multiplier
+    mult = get_multiplier()
+
     if player_time < npc_time:
-        # Победа
         win = bet * 2
+        win = win * mult
+
         await update_player(
             callback.from_user.id,
             balance=player["balance"] - bet + win,
         )
         await add_exp(callback.from_user.id, 30)
+
+        bonus_text = f" ×{mult}" if mult > 1 else ""
 
         result_text = (
             f"╔══════════════════╗\n"
@@ -223,7 +216,7 @@ async def race_start(callback: CallbackQuery):
             f"║ NPC:   {npc_time} сек  ║\n"
             f"╠══════════════════╣\n"
             f"║ 🏆 ТЫ ВЫИГРАЛ!   ║\n"
-            f"║ 💰 +${bet}        ║\n"
+            f"║ 💰 +${win}{bonus_text}   ║\n"
             f"╚══════════════════╝"
         )
     elif npc_time < player_time:
@@ -239,66 +232,6 @@ async def race_start(callback: CallbackQuery):
             f"╚══════════════════╝"
         )
     else:
-        # Ничья
         await update_player(callback.from_user.id, balance=player["balance"])
         result_text = (
-            f"╔══════════════════╗\n"
-            f"║    🏁 ФИНИШ 🏁   ║\n"
-            f"╠══════════════════╣\n"
-            f"║ Ты:    {player_time} сек  ║\n"
-            f"║ NPC:   {npc_time} сек  ║\n"
-            f"╠══════════════════╣\n"
-            f"║ 🤝 НИЧЬЯ         ║\n"
-            f"║ 💰 Ставка возвращена ║\n"
-            f"╚══════════════════╝"
-        )
-
-    await msg.edit_text(result_text, reply_markup=race_result_kb())
-    await callback.answer()
-
-
-# ============================================
-# ЗАЕЗД С ИГРОКАМИ (PvP)
-# ============================================
-@router.callback_query(F.data == "race_pvp")
-async def race_pvp(callback: CallbackQuery, state: FSMContext):
-    player = await get_player(callback.from_user.id)
-
-    if not player.get("car"):
-        await callback.answer("🚗 Сначала купи машину!", show_alert=True)
-        return
-
-    await callback.message.delete()
-    msg = await callback.message.answer(
-        f"👥 <b>ПОИСК ИГРОКА...</b>\n\n"
-        f"⏱ 30 секунд на поиск",
-        parse_mode=ParseMode.HTML,
-    )
-
-    from database import get_online_players
-    import asyncio
-
-    await asyncio.sleep(3)
-
-    opponents = await get_online_players(callback.from_user.id, limit=1)
-
-    if not opponents:
-        await msg.edit_text(
-            f"🤖 <b>ИГРОКОВ НЕТ</b>\n\n"
-            f"Заезд с NPC.\n\n"
-            f"Введи ставку:",
-            parse_mode=ParseMode.HTML,
-        )
-        await state.set_state(Race.bet)
-        return
-
-    await msg.edit_text(
-        f"👥 <b>ИГРОК НАЙДЕН</b>\n\n"
-        f"👤 {opponents[0]['nickname']}\n\n"
-        f"PvP-гонки в разработке.\n"
-        f"Пока заезд с NPC.\n\n"
-        f"Введи ставку:",
-        parse_mode=ParseMode.HTML,
-    )
-    await state.set_state(Race.bet)
-    await callback.answer()
+            f"╔══════════════════╗\
