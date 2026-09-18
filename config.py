@@ -1,6 +1,6 @@
 import os
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+BOT_TOKEN = os.getenv("8893893820:AAENUENVdYDfgTHs7FNta1C1fhUX3eXkh44", "")
 SUPPORT_USERNAME = "pegvi"
 SUPPORT_ID = 6236795210
 DB_PATH = "gta_bot.db"
