@@ -32,27 +32,27 @@ DISTRICTS = {
     "idlewood": {
         "name": "🟣 Idlewood",
         "faction": "Ballas",
-        "buildings": ["🏪 Магазин 24/7", "🔫 Арсенал", "🍔 Кафе"],
+        "buildings": ["🏪 Магазин 24/7", "🏥 Больница", "🔫 Арсенал"],
     },
     "east_ls": {
         "name": "🔵 East LS",
         "faction": "Los Vagos",
-        "buildings": ["🏪 Магазин 24/7", "💪 Качалка", "🔧 Автосервис"],
+        "buildings": ["🏪 Магазин 24/7", "🔧 Автосервис", "🏁 Трек"],
     },
     "el_corona": {
         "name": "⚪ El Corona",
         "faction": "Ацтеки",
-        "buildings": ["🏪 Магазин 24/7", "🏨 Отель", "🍔 Кафе"],
+        "buildings": ["🏪 Магазин 24/7", "🏥 Больница", "🏨 Отель"],
     },
     "downtown": {
         "name": "💼 Downtown",
         "faction": "Нейтрал",
-        "buildings": ["🏪 Магазин 24/7", "🏦 Банк", "🔫 Арсенал", "🚗 Автосалон"],
+        "buildings": ["🏪 Магазин 24/7", "🏥 Больница", "🏦 Банк", "🔫 Арсенал", "🚗 Автосалон"],
     },
     "beach": {
         "name": "🏖 Пляж",
         "faction": "Нейтрал",
-        "buildings": ["🏪 Магазин 24/7", "🎰 Казино", "🏁 Гонки"],
+        "buildings": ["🏪 Магазин 24/7", "🎰 Казино", "🏁 Трек"],
     },
 }
 
@@ -77,6 +77,10 @@ CAR_MULTIPLIERS = {
 WALK_MULTIPLIER = 2.0
 TAXI_MULTIPLIER = 0.5
 
+# Двигатель и нитро
+ENGINE_MULTIPLIERS = {0: 1.0, 1: 0.9, 2: 0.8, 3: 0.7}
+NITRO_MULTIPLIER = 0.7
+
 TAXI_PRICE_NPC = 350
 TAXI_PRICE_PLAYER = 500
 TAXI_CANCEL_PENALTY = 100
@@ -84,12 +88,21 @@ TAXI_CANCEL_PENALTY = 100
 active_travels = {}
 
 
+# ============================================
+# РАСЧЁТ ВРЕМЕНИ
+# ============================================
 def get_travel_time(from_district: str, to_district: str, player: dict) -> float:
     base = DISTANCES.get(from_district, {}).get(to_district, 5)
+
     if player.get("car"):
         mult = CAR_MULTIPLIERS.get(player["car"], 1.5)
+        engine = player.get("engine_level", 0)
+        mult *= ENGINE_MULTIPLIERS.get(engine, 1.0)
+        if player.get("nitro", 0):
+            mult *= NITRO_MULTIPLIER
     else:
         mult = WALK_MULTIPLIER
+
     return base * mult
 
 
@@ -112,6 +125,21 @@ async def map_menu(message: Message):
         await message.answer("🚔 Ты в тюрьме, карта недоступна.")
         return
 
+    travel = active_travels.get(message.from_user.id)
+    if travel:
+        now = datetime.now()
+        left = int((travel["until"] - now).total_seconds())
+        if left > 0:
+            mins, secs = divmod(left, 60)
+            await message.answer(
+                f"🚶 <b>ТЫ В ПУТИ</b>\n\n"
+                f"📍 {DISTRICTS[travel['from']]['name']} → {DISTRICTS[travel['to']]['name']}\n\n"
+                f"⏱ Осталось: {mins}:{secs:02d}\n\n"
+                f"Подожди окончания поездки!",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
     current = player.get("district_key") or "ganton"
 
     await message.answer(
@@ -128,7 +156,8 @@ async def map_back(callback: CallbackQuery):
     player = await get_player(callback.from_user.id)
     current = player.get("district_key") or "ganton"
 
-    await callback.message.edit_text(
+    await callback.message.delete()
+    await callback.message.answer(
         f"🗺 <b>КАРТА LOS SANTOS</b>\n\n"
         f"📍 Ты в: {DISTRICTS[current]['name']}\n\n"
         f"Куда ехать?",
@@ -139,10 +168,15 @@ async def map_back(callback: CallbackQuery):
 
 
 # ============================================
-# ПЕРЕЕЗД (пешком/машина)
+# ПЕРЕЕЗД
 # ============================================
 @router.callback_query(F.data.startswith("travel_"))
 async def travel(callback: CallbackQuery):
+    existing = active_travels.get(callback.from_user.id)
+    if existing:
+        await callback.answer("⚠️ Ты уже в пути!", show_alert=True)
+        return
+
     to_district = callback.data.replace("travel_", "")
     player = await get_player(callback.from_user.id)
     current = player.get("district_key") or "ganton"
@@ -185,7 +219,7 @@ async def travel(callback: CallbackQuery):
 
 
 # ============================================
-# ТАКСИ (КАРТА) — map_taxi_menu
+# ТАКСИ
 # ============================================
 @router.callback_query(F.data == "map_taxi_menu")
 async def map_taxi_menu(callback: CallbackQuery):
@@ -204,6 +238,11 @@ async def map_taxi_menu(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("taxi_to_"))
 async def taxi_to(callback: CallbackQuery):
+    existing = active_travels.get(callback.from_user.id)
+    if existing:
+        await callback.answer("⚠️ Ты уже в пути!", show_alert=True)
+        return
+
     to_district = callback.data.replace("taxi_to_", "")
     player = await get_player(callback.from_user.id)
     current = player.get("district_key") or "ganton"
@@ -248,7 +287,7 @@ async def taxi_to(callback: CallbackQuery):
 
 
 # ============================================
-# ОТМЕНА ПОЕЗДКИ
+# ОТМЕНА
 # ============================================
 @router.callback_query(F.data == "travel_cancel")
 async def travel_cancel(callback: CallbackQuery):
@@ -296,7 +335,7 @@ async def district_view(callback: CallbackQuery):
 
 
 # ============================================
-# ТАЙМЕР ПОЕЗДКИ
+# ТАЙМЕР
 # ============================================
 async def update_travel_timer(telegram_id: int, message: Message):
     while True:
