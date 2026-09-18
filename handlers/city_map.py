@@ -6,7 +6,10 @@ import asyncio
 from datetime import datetime, timedelta
 
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import (
+    Message, CallbackQuery,
+    InlineKeyboardMarkup, InlineKeyboardButton,
+)
 from aiogram.enums import ParseMode
 
 from database import get_player, update_player
@@ -141,6 +144,30 @@ def get_taxi_time(from_district: str, to_district: str) -> float:
 
 
 # ============================================
+# ХЕЛПЕРЫ ДЛЯ КЛАВИАТУР
+# ============================================
+def _get_times(current: str, player: dict) -> dict:
+    """Словарь {district_key: time_str}"""
+    times = {}
+    for key in DISTRICTS:
+        if key == current:
+            continue
+        t = get_travel_time(current, key, player)
+        times[key] = f"{t:.1f}м" if t < 10 else f"{int(t)}м"
+    return times
+
+
+def _get_taxi_times(current: str) -> dict:
+    times = {}
+    for key in DISTRICTS:
+        if key == current:
+            continue
+        t = get_taxi_time(current, key)
+        times[key] = f"{t:.1f}м" if t < 10 else f"{int(t)}м"
+    return times
+
+
+# ============================================
 # МЕНЮ КАРТЫ
 # ============================================
 @router.message(F.text == "🗺 Карта")
@@ -170,12 +197,13 @@ async def map_menu(message: Message):
             return
 
     current = player.get("district_key") or "ganton"
+    times = _get_times(current, player)
 
     await message.answer(
         f"🗺 <b>КАРТА LOS SANTOS</b>\n\n"
         f"📍 Ты в: {DISTRICTS[current]['name']}\n\n"
         f"Куда ехать?",
-        reply_markup=map_menu_kb(current, player),
+        reply_markup=map_menu_kb(current, times),
         parse_mode=ParseMode.HTML,
     )
 
@@ -184,13 +212,14 @@ async def map_menu(message: Message):
 async def map_back(callback: CallbackQuery):
     player = await get_player(callback.from_user.id)
     current = player.get("district_key") or "ganton"
+    times = _get_times(current, player)
 
     await callback.message.delete()
     await callback.message.answer(
         f"🗺 <b>КАРТА LOS SANTOS</b>\n\n"
         f"📍 Ты в: {DISTRICTS[current]['name']}\n\n"
         f"Куда ехать?",
-        reply_markup=map_menu_kb(current, player),
+        reply_markup=map_menu_kb(current, times),
         parse_mode=ParseMode.HTML,
     )
     await callback.answer()
@@ -254,12 +283,13 @@ async def travel(callback: CallbackQuery):
 async def map_taxi_menu(callback: CallbackQuery):
     player = await get_player(callback.from_user.id)
     current = player.get("district_key") or "ganton"
+    times = _get_taxi_times(current)
 
     await callback.message.edit_text(
         f"🚕 <b>ТАКСИ</b>\n\n"
         f"📍 Откуда: {DISTRICTS[current]['name']}\n\n"
         f"Куда ехать?",
-        reply_markup=travel_taxi_kb(current),
+        reply_markup=travel_taxi_kb(current, times),
         parse_mode=ParseMode.HTML,
     )
     await callback.answer()
@@ -343,7 +373,7 @@ async def travel_cancel(callback: CallbackQuery):
 
 
 # ============================================
-# ПРОСМОТР РАЙОНА (с кнопками зданий)
+# ПРОСМОТР РАЙОНА
 # ============================================
 @router.callback_query(F.data == "district_view")
 async def district_view(callback: CallbackQuery):
@@ -369,7 +399,7 @@ async def district_view(callback: CallbackQuery):
 
 
 # ============================================
-# КНОПКА «ЗДАНИЯ» — текущий район
+# КНОПКА «ЗДАНИЯ»
 # ============================================
 @router.message(F.text == "🏢 Здания")
 async def buildings_menu(message: Message):
@@ -406,7 +436,7 @@ async def buildings_menu(message: Message):
 
 
 # ============================================
-# ХЕНДЛЕРЫ ОТКРЫТИЯ ЗДАНИЙ
+# ОТКРЫТИЕ ЗДАНИЙ
 # ============================================
 @router.callback_query(F.data == "open_shop")
 async def open_shop(callback: CallbackQuery):
