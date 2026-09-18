@@ -36,6 +36,8 @@ async def init_db():
                 bank_balance INTEGER DEFAULT 0,
                 bank_deposit INTEGER DEFAULT 0,
                 bank_last_interest TIMESTAMP,
+                daily_streak INTEGER DEFAULT 0,
+                last_bonus TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
