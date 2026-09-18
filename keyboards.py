@@ -175,7 +175,7 @@ def jail_kb():
 
 
 # ============================================
-# МАГАЗИН
+# МАГАЗИН (без лечения!)
 # ============================================
 def shop_menu_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -186,7 +186,6 @@ def shop_menu_kb():
         [InlineKeyboardButton(text="🛡 Броня — $1500 (+30%)", callback_data="buy_armor")],
         [InlineKeyboardButton(text="💊 Аптечка — $300 (+50 HP)", callback_data="buy_medkit")],
         [InlineKeyboardButton(text="🍔 Еда — $50 (+20 HP)", callback_data="buy_food")],
-        [InlineKeyboardButton(text="🏥 Лечение (полный HP) — $50", callback_data="buy_heal")],
     ])
 
 
