@@ -193,6 +193,25 @@ def shop_back_kb():
 
 
 # ============================================
+# АРСЕНАЛ
+# ============================================
+def arsenal_menu_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔫 Пистолет — $500 (+10%)", callback_data="ars_pistol")],
+        [InlineKeyboardButton(text="🔫🔫 SMG — $2000 (+15%)", callback_data="ars_smg")],
+        [InlineKeyboardButton(text="🎯 Дробовик — $3500 (+18%)", callback_data="ars_shotgun")],
+        [InlineKeyboardButton(text="💥 Автомат — $8000 (+20%)", callback_data="ars_rifle")],
+        [InlineKeyboardButton(text="🛡 Броня — $1500 (+30%)", callback_data="ars_armor")],
+    ])
+
+
+def arsenal_back_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 В арсенал", callback_data="arsenal_back")],
+    ])
+
+
+# ============================================
 # ТРАНСПОРТ
 # ============================================
 def transport_menu_kb(current_car=None):
