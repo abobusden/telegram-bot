@@ -10,7 +10,7 @@ from config import FACTIONS, SUPPORT_USERNAME
 
 
 # ============================================
-# REPLY-МЕНЮ (2 страницы)
+# REPLY-МЕНЮ
 # ============================================
 def main_menu_kb(page: int = 1):
     if page == 2:
@@ -94,10 +94,7 @@ def jobs_menu_kb(level: int):
         if level >= lvl:
             buttons.append([InlineKeyboardButton(text=text, callback_data=f"job_{key}")])
         else:
-            buttons.append([InlineKeyboardButton(
-                text=f"🔒 {text} (ур.{lvl})",
-                callback_data="noop",
-            )])
+            buttons.append([InlineKeyboardButton(text=f"🔒 {text} (ур.{lvl})", callback_data="noop")])
     buttons.append([InlineKeyboardButton(text="🚕 Такси (PvP)", callback_data="taxi_menu")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -216,10 +213,8 @@ def arsenal_back_kb():
 # ============================================
 def hospital_menu_kb(balance: int, hp: int):
     buttons = []
-
     if hp < 100 and balance >= 500:
         buttons.append([InlineKeyboardButton(text="💊 Лечиться — $500", callback_data="hospital_heal")])
-
     buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="hospital_back")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -231,11 +226,49 @@ def hospital_back_kb():
 
 
 # ============================================
+# БАНК
+# ============================================
+def bank_create_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Создать счёт", callback_data="bank_create")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="bank_back")],
+    ])
+
+
+def bank_menu_kb(bank_balance: int, deposit: int):
+    buttons = [
+        [InlineKeyboardButton(text="💸 Перевести на счёт", callback_data="bank_transfer")],
+        [InlineKeyboardButton(text="📥 Пополнить счёт", callback_data="bank_topup")],
+    ]
+    if bank_balance > 0:
+        buttons.append([InlineKeyboardButton(text="💸 Снять со счёта", callback_data="bank_withdraw_acc")])
+    buttons.append([InlineKeyboardButton(text="📈 Вложить под 5%", callback_data="bank_deposit")])
+    if deposit > 0:
+        buttons.append([InlineKeyboardButton(text="💸 Снять вклад", callback_data="bank_withdraw_dep")])
+    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="bank_back")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def bank_back_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 В банк", callback_data="bank_back")],
+    ])
+
+
+def bank_confirm_transfer_kb(account: str, name: str, amount: int):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"bank_confirm_{account}_{amount}")],
+        [InlineKeyboardButton(text="❌ Отказаться", callback_data="bank_back")],
+    ])
+
+
+# ============================================
 # ТРАНСПОРТ
 # ============================================
 def transport_menu_kb(current_car=None):
-    buttons = []
-    buttons.append([InlineKeyboardButton(text="🏎 Автосалон", callback_data="autosalon")])
+    buttons = [
+        [InlineKeyboardButton(text="🏎 Автосалон", callback_data="autosalon")],
+    ]
     if current_car:
         buttons.append([InlineKeyboardButton(text="🏠 Мой гараж", callback_data="garage")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -340,6 +373,98 @@ def back_to_home_kb():
 
 
 # ============================================
+# АВТОСЕРВИС
+# ============================================
+def autoservice_menu_kb(engine_level: int, nitro: int):
+    buttons = []
+
+    if engine_level < 3:
+        next_level = engine_level + 1
+        prices = {1: 3000, 2: 8000, 3: 15000}
+        price = prices[next_level]
+        buttons.append([InlineKeyboardButton(
+            text=f"🔧 Двигатель ур.{next_level} — ${price:,}",
+            callback_data="autoservice_engine",
+        )])
+
+    if not nitro:
+        buttons.append([InlineKeyboardButton(
+            text="💨 Нитро — $10,000",
+            callback_data="autoservice_nitro",
+        )])
+
+    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="autoservice_back")])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def autoservice_back_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="autoservice_back")],
+    ])
+
+
+# ============================================
+# КАЗИНО
+# ============================================
+def casino_menu_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎲 Кубик", callback_data="casino_dice")],
+        [InlineKeyboardButton(text="🎰 Слоты", callback_data="casino_slots")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="casino_back")],
+    ])
+
+
+def casino_back_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 В казино", callback_data="casino_back")],
+    ])
+
+
+def casino_bet_cancel_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="casino_back")],
+    ])
+
+
+# ============================================
+# ГОНКИ
+# ============================================
+def race_menu_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🏎 Быстрый заезд", callback_data="race_fast")],
+        [InlineKeyboardButton(text="👥 Заезд с игроками", callback_data="race_pvp")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="race_back")],
+    ])
+
+
+def race_back_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="race_back")],
+    ])
+
+
+def race_confirm_kb(bet: int):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🏁 Начать заезд", callback_data=f"race_start_{bet}")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="race_back")],
+    ])
+
+
+def race_result_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔁 Ещё раз", callback_data="race_fast")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="race_back")],
+    ])
+
+
+def race_bet_cancel_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="race_back")],
+    ])
+
+
+# ============================================
 # БАНДЫ
 # ============================================
 def gang_menu_kb():
@@ -412,30 +537,28 @@ def pvp_challenge_kb():
 
 
 # ============================================
-# КАРТА
+# КАРТА (без импорта city_map!)
 # ============================================
-def map_menu_kb(current: str, player: dict):
+def map_menu_kb(current: str, times: dict):
+    """times = {district_key: time_str}"""
     buttons = []
 
     districts_order = ["ganton", "idlewood", "east_ls", "el_corona", "downtown", "beach"]
+
+    names = {
+        "ganton": "🟢 Ganton",
+        "idlewood": "🟣 Idlewood",
+        "east_ls": "🔵 East LS",
+        "el_corona": "⚪ El Corona",
+        "downtown": "💼 Downtown",
+        "beach": "🏖 Пляж",
+    }
+
     for key in districts_order:
         if key == current:
             continue
-
-        from handlers.city_map import DISTANCES, DISTRICTS, CAR_MULTIPLIERS, WALK_MULTIPLIER
-
-        base = DISTANCES.get(current, {}).get(key, 5)
-
-        if player.get("car"):
-            mult = CAR_MULTIPLIERS.get(player["car"], 1.5)
-        else:
-            mult = WALK_MULTIPLIER
-
-        time_min = base * mult
-        time_str = f"{time_min:.1f}м" if time_min < 10 else f"{int(time_min)}м"
-
-        name = DISTRICTS[key]["name"]
-
+        time_str = times.get(key, "?")
+        name = names[key]
         buttons.append([InlineKeyboardButton(
             text=f"{name} — {time_str}",
             callback_data=f"travel_{key}",
@@ -447,20 +570,26 @@ def map_menu_kb(current: str, player: dict):
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def travel_taxi_kb(current: str):
+def travel_taxi_kb(current: str, times: dict):
+    """times = {district_key: time_str}"""
     buttons = []
+
     districts_order = ["ganton", "idlewood", "east_ls", "el_corona", "downtown", "beach"]
 
-    from handlers.city_map import DISTRICTS, get_taxi_time
+    names = {
+        "ganton": "🟢 Ganton",
+        "idlewood": "🟣 Idlewood",
+        "east_ls": "🔵 East LS",
+        "el_corona": "⚪ El Corona",
+        "downtown": "💼 Downtown",
+        "beach": "🏖 Пляж",
+    }
 
     for key in districts_order:
         if key == current:
             continue
-
-        time_min = get_taxi_time(current, key)
-        time_str = f"{time_min:.1f}м" if time_min < 10 else f"{int(time_min)}м"
-        name = DISTRICTS[key]["name"]
-
+        time_str = times.get(key, "?")
+        name = names[key]
         buttons.append([InlineKeyboardButton(
             text=f"{name} — {time_str}",
             callback_data=f"taxi_to_{key}",
@@ -486,146 +615,4 @@ def district_view_kb():
 def back_to_map_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔙 К карте", callback_data="map_back")],
-    ])
-# ============================================
-# БАНК
-# ============================================
-def bank_create_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Создать счёт", callback_data="bank_create")],
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="bank_back")],
-    ])
-
-
-def bank_menu_kb(bank_balance: int, deposit: int):
-    buttons = [
-        [InlineKeyboardButton(text="💸 Перевести на счёт", callback_data="bank_transfer")],
-        [InlineKeyboardButton(text="📥 Пополнить счёт", callback_data="bank_topup")],
-    ]
-
-    if bank_balance > 0:
-        buttons.append([InlineKeyboardButton(text="💸 Снять со счёта", callback_data="bank_withdraw_acc")])
-
-    buttons.append([InlineKeyboardButton(text="📈 Вложить под 5%", callback_data="bank_deposit")])
-
-    if deposit > 0:
-        buttons.append([InlineKeyboardButton(text="💸 Снять вклад", callback_data="bank_withdraw_dep")])
-
-    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="bank_back")])
-
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
-def bank_back_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔙 В банк", callback_data="bank_back")],
-    ])
-
-
-def bank_confirm_transfer_kb(account: str, name: str, amount: int):
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text="✅ Подтвердить",
-            callback_data=f"bank_confirm_{account}_{amount}",
-        )],
-        [InlineKeyboardButton(text="❌ Отказаться", callback_data="bank_back")],
-    ])
-# ============================================
-# БАНК
-# ============================================
-def bank_create_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Создать счёт", callback_data="bank_create")],
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="bank_back")],
-    ])
-
-
-def bank_menu_kb(bank_balance: int, deposit: int):
-    buttons = [
-        [InlineKeyboardButton(text="💸 Перевести на счёт", callback_data="bank_transfer")],
-        [InlineKeyboardButton(text="📥 Пополнить счёт", callback_data="bank_topup")],
-    ]
-
-    if bank_balance > 0:
-        buttons.append([InlineKeyboardButton(text="💸 Снять со счёта", callback_data="bank_withdraw_acc")])
-
-    buttons.append([InlineKeyboardButton(text="📈 Вложить под 5%", callback_data="bank_deposit")])
-
-    if deposit > 0:
-        buttons.append([InlineKeyboardButton(text="💸 Снять вклад", callback_data="bank_withdraw_dep")])
-
-    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="bank_back")])
-
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
-def bank_back_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔙 В банк", callback_data="bank_back")],
-    ])
-
-
-def bank_confirm_transfer_kb(account: str, name: str, amount: int):
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text="✅ Подтвердить",
-            callback_data=f"bank_confirm_{account}_{amount}",
-        )],
-        [InlineKeyboardButton(text="❌ Отказаться", callback_data="bank_back")],
-    ])
-# ============================================
-# КАЗИНО
-# ============================================
-def casino_menu_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎲 Кубик", callback_data="casino_dice")],
-        [InlineKeyboardButton(text="🎰 Слоты", callback_data="casino_slots")],
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="casino_back")],
-    ])
-
-
-def casino_back_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔙 В казино", callback_data="casino_back")],
-    ])
-
-
-def casino_bet_cancel_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="casino_back")],
-    ])
-# ============================================
-# ГОНКИ
-# ============================================
-def race_menu_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🏎 Быстрый заезд", callback_data="race_fast")],
-        [InlineKeyboardButton(text="👥 Заезд с игроками", callback_data="race_pvp")],
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="race_back")],
-    ])
-
-
-def race_back_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="race_back")],
-    ])
-
-
-def race_confirm_kb(bet: int):
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🏁 Начать заезд", callback_data=f"race_start_{bet}")],
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="race_back")],
-    ])
-
-
-def race_result_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔁 Ещё раз", callback_data="race_fast")],
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="race_back")],
-    ])
-
-
-def race_bet_cancel_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="race_back")],
     ])
