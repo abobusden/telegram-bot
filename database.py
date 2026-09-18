@@ -32,6 +32,10 @@ async def init_db():
                 pvp_losses INTEGER DEFAULT 0,
                 engine_level INTEGER DEFAULT 0,
                 nitro INTEGER DEFAULT 0,
+                bank_account TEXT UNIQUE,
+                bank_balance INTEGER DEFAULT 0,
+                bank_deposit INTEGER DEFAULT 0,
+                bank_last_interest TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
