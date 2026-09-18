@@ -30,6 +30,8 @@ async def init_db():
                 gang_cooldown TIMESTAMP,
                 pvp_wins INTEGER DEFAULT 0,
                 pvp_losses INTEGER DEFAULT 0,
+                engine_level INTEGER DEFAULT 0,
+                nitro INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -79,9 +81,6 @@ async def update_player(telegram_id: int, **fields):
         await db.commit()
 
 
-# ============================================
-# ОПЫТ + УРОВЕНЬ
-# ============================================
 async def add_exp(telegram_id: int, amount: int):
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
@@ -110,9 +109,6 @@ async def add_exp(telegram_id: int, amount: int):
         return {"level": level, "exp": exp, "levels_up": levels_up}
 
 
-# ============================================
-# УРОВЕНЬ КРИМИНАЛА
-# ============================================
 CRIME_DEALS_PER_LEVEL = 5
 
 
@@ -154,9 +150,6 @@ def get_crime_bonus(crime_level: int) -> float:
     return bonuses.get(crime_level, 1.0)
 
 
-# ============================================
-# БАНДЫ — КД
-# ============================================
 async def set_gang_cooldown(telegram_id: int, until):
     await update_player(telegram_id, gang_cooldown=until.isoformat())
 
@@ -176,9 +169,6 @@ async def get_gang_cooldown(telegram_id: int):
         return None
 
 
-# ============================================
-# PVP — статистика
-# ============================================
 async def add_pvp_win(telegram_id: int):
     player = await get_player(telegram_id)
     await update_player(telegram_id, pvp_wins=player["pvp_wins"] + 1)
