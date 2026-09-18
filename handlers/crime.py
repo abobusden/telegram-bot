@@ -1,5 +1,5 @@
 # ============================================
-# КРИМИНАЛ + РОЗЫСК
+# КРИМИНАЛ + РОЗЫСК + УРОВЕНЬ КРИМИНАЛА
 # ============================================
 
 import random
@@ -8,60 +8,25 @@ from datetime import datetime, timedelta
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 
-from database import get_player, update_player, add_exp, add_crime_deal, get_crime_bonus
+from database import (
+    get_player, update_player, add_exp,
+    add_crime_deal, get_crime_bonus,
+)
 from keyboards import crime_menu_kb, back_to_crime_kb, jail_kb
 
 
 router = Router()
 
-# ============================================
-# КРИМИНАЛЬНЫЕ ДЕЙСТВИЯ
-# ============================================
 CRIMES = {
-    "car": {
-        "name": "🚗 Угон машины",
-        "lvl": 1,
-        "min_pay": 500,
-        "max_pay": 2000,
-        "risk_win": 1,
-        "cd": 600,
-        "exp": 20,
-    },
-    "shop": {
-        "name": "🏪 Ограбить магазин",
-        "lvl": 3,
-        "min_pay": 1000,
-        "max_pay": 3000,
-        "risk_win": 2,
-        "cd": 1200,
-        "exp": 30,
-    },
-    "drugs": {
-        "name": "💊 Наркотики",
-        "lvl": 5,
-        "min_pay": 2000,
-        "max_pay": 5000,
-        "risk_win": 3,
-        "cd": 1800,
-        "exp": 50,
-    },
-    "bank": {
-        "name": "🏦 Ограбить банк",
-        "lvl": 10,
-        "min_pay": 10000,
-        "max_pay": 20000,
-        "risk_win": 4,
-        "cd": 3600,
-        "exp": 100,
-    },
+    "car":   {"name": "🚗 Угон машины",     "lvl": 1,  "min_pay": 500,   "max_pay": 2000,   "risk_win": 1, "cd": 600,  "exp": 20},
+    "shop":  {"name": "🏪 Ограбить магазин","lvl": 3,  "min_pay": 1000,  "max_pay": 3000,   "risk_win": 2, "cd": 1200, "exp": 30},
+    "drugs": {"name": "💊 Наркотики",       "lvl": 5,  "min_pay": 2000,  "max_pay": 5000,   "risk_win": 3, "cd": 1800, "exp": 50},
+    "bank":  {"name": "🏦 Ограбить банк",   "lvl": 10, "min_pay": 10000, "max_pay": 20000,  "risk_win": 4, "cd": 3600, "exp": 100},
 }
 
 crime_cooldowns = {}
 
 
-# ============================================
-# МЕНЮ КРИМИНАЛА
-# ============================================
 @router.message(F.text == "⚔️ Криминал")
 async def crime_menu(message: Message):
     player = await get_player(message.from_user.id)
@@ -108,9 +73,6 @@ async def crime_back(callback: CallbackQuery):
     await callback.answer()
 
 
-# ============================================
-# ВЫПОЛНЕНИЕ ПРЕСТУПЛЕНИЯ (ВСЕГДА УСПЕХ)
-# ============================================
 @router.callback_query(F.data.startswith("crime_"))
 async def do_crime(callback: CallbackQuery):
     crime_key = callback.data.replace("crime_", "")
@@ -139,15 +101,16 @@ async def do_crime(callback: CallbackQuery):
         await callback.answer(f"⏳ Подожди {mins}:{secs:02d}", show_alert=True)
         return
 
-    # ============================================
-    # ВСЕГДА УСПЕХ
-    # ============================================
     base_pay = random.randint(crime["min_pay"], crime["max_pay"])
 
-    # Бонус от уровня криминала
     crime_level = player.get("crime_level", 1)
     bonus_mult = get_crime_bonus(crime_level)
     pay = int(base_pay * bonus_mult)
+
+    # ×2 по выходным
+    from handlers.events import get_multiplier
+    mult = get_multiplier()
+    pay = pay * mult
 
     new_wanted = min(5, player["wanted"] + crime["risk_win"])
     new_balance = player["balance"] + pay
@@ -158,13 +121,11 @@ async def do_crime(callback: CallbackQuery):
         wanted=new_wanted,
     )
 
-    # Опыт
     exp_result = await add_exp(callback.from_user.id, crime["exp"])
     level_up_text = ""
     if exp_result and exp_result["levels_up"] > 0:
         level_up_text = f"\n🎉 <b>УРОВЕНЬ {exp_result['level']}!</b>"
 
-    # Счётчик криминала
     crime_result = await add_crime_deal(callback.from_user.id)
     crime_up_text = ""
     if crime_result and crime_result["leveled_up"]:
@@ -173,8 +134,9 @@ async def do_crime(callback: CallbackQuery):
     bonus_text = ""
     if crime_level > 1:
         bonus_text = f"\n💰 Бонус ур.{crime_level}: +{int((bonus_mult - 1) * 100)}%"
+    if mult > 1:
+        bonus_text += f"\n🔥 ×{mult} (выходной)"
 
-    # Кулдаун
     if callback.from_user.id not in crime_cooldowns:
         crime_cooldowns[callback.from_user.id] = {}
     crime_cooldowns[callback.from_user.id][crime_key] = now + timedelta(seconds=crime["cd"])
@@ -192,9 +154,6 @@ async def do_crime(callback: CallbackQuery):
     )
     await callback.answer("Дело сделано!")
 
-    # ============================================
-    # ПРОВЕРКА НА ТЮРЬМУ (3+ ⭐)
-    # ============================================
     player = await get_player(callback.from_user.id)
     if player["wanted"] >= 3:
         if random.random() < 0.6:
@@ -221,9 +180,6 @@ async def do_crime(callback: CallbackQuery):
             )
 
 
-# ============================================
-# ХРАНИЛИЩЕ ТЮРЬМЫ
-# ============================================
 jail_data = {}
 
 
