@@ -23,13 +23,9 @@ from keyboards import (
 
 router = Router()
 
-# Хранилище вызовов
 active_challenges = {}
 
 
-# ============================================
-# МЕНЮ PVP
-# ============================================
 @router.message(F.text == "⚔️ PvP")
 async def pvp_menu(message: Message):
     player = await get_player(message.from_user.id)
@@ -74,9 +70,6 @@ async def pvp_back(callback: CallbackQuery):
     await callback.answer()
 
 
-# ============================================
-# ПОИСК СОПЕРНИКА
-# ============================================
 @router.callback_query(F.data == "pvp_search")
 async def pvp_search(callback: CallbackQuery):
     player = await get_player(callback.from_user.id)
@@ -89,10 +82,8 @@ async def pvp_search(callback: CallbackQuery):
         parse_mode=ParseMode.HTML,
     )
 
-    # Ждём 3 секунды
     await asyncio.sleep(3)
 
-    # Ищем игроков онлайн
     opponents = await get_online_players(callback.from_user.id, limit=5)
 
     if opponents:
@@ -103,7 +94,6 @@ async def pvp_search(callback: CallbackQuery):
             parse_mode=ParseMode.HTML,
         )
     else:
-        # NPC
         await msg.edit_text(
             f"⚔️ <b>ИГРОКОВ НЕТ</b>\n\n"
             f"⏳ Ищем NPC...",
@@ -123,9 +113,6 @@ async def pvp_search(callback: CallbackQuery):
     await callback.answer()
 
 
-# ============================================
-# ВЫБОР СТАВКИ
-# ============================================
 @router.callback_query(F.data.startswith("pvp_bet_"))
 async def pvp_bet(callback: CallbackQuery):
     bet = int(callback.data.replace("pvp_bet_", ""))
@@ -152,9 +139,6 @@ async def pvp_bet(callback: CallbackQuery):
     await callback.answer()
 
 
-# ============================================
-# БОЙ С NPC
-# ============================================
 @router.callback_query(F.data == "pvp_fight")
 async def pvp_fight(callback: CallbackQuery):
     player = await get_player(callback.from_user.id)
@@ -172,15 +156,22 @@ async def pvp_fight(callback: CallbackQuery):
 
     result = simulate_fight(player)
 
+    from handlers.events import get_multiplier
+    mult = get_multiplier()
+
     if result["winner"] == "player":
-        new_balance = player["balance"] + bet
+        win_amount = bet * mult
+
+        new_balance = player["balance"] + win_amount
         await update_player(callback.from_user.id, balance=new_balance, hp=20)
         await add_pvp_win(callback.from_user.id)
+
+        bonus_text = f" ×{mult}" if mult > 1 else ""
 
         await callback.message.edit_text(
             f"⚔️ <b>БОЙ ЗАВЕРШЁН</b>\n\n"
             f"🏆 <b>ПОБЕДА!</b>\n\n"
-            f"💰 +${bet}\n"
+            f"💰 +${win_amount}{bonus_text}\n"
             f"❤️ HP: 20/100\n"
             f"📊 +30 опыта",
             reply_markup=pvp_back_kb(),
@@ -214,9 +205,6 @@ async def pvp_fight(callback: CallbackQuery):
     await callback.answer()
 
 
-# ============================================
-# СИМУЛЯЦИЯ БОЯ
-# ============================================
 def simulate_fight(player):
     player_hp = 100
     npc_hp = 100
