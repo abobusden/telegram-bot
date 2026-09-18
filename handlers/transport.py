@@ -1,5 +1,5 @@
 # ============================================
-# ТРАНСПОРТ (автосалон + гараж) — с фото и ПТС
+# ТРАНСПОРТ (автосалон + гараж) — с категориями
 # ============================================
 
 from aiogram import Router, F
@@ -8,96 +8,111 @@ from aiogram.enums import ParseMode
 
 from database import get_player, update_player
 from keyboards import (
-    transport_menu_kb, autosalon_kb, garage_kb,
-    back_to_transport_kb, car_info_kb,
+    transport_menu_kb, autosalon_categories_kb,
+    autosalon_a_kb, autosalon_b_kb, autosalon_c_kb,
+    car_info_kb, garage_kb, back_to_transport_kb,
+    back_to_autosalon_kb,
 )
 
 
 router = Router()
 
 # ============================================
-# 10 МАШИН (с фото)
+# 10 МАШИН (с категориями)
 # ============================================
 CARS = {
-    "sedan": {
-        "name": "🚗 Sedan",
-        "price": 5000,
-        "speed": 3,
-        "photo": "https://i.ibb.co/jZH7h8Fr/Screenshot-20260913-110605.jpg",
-        "category": "Легковая",
-        "bonus": "Универсальная, дёшево",
-    },
-    "minivan": {
-        "name": "🚐 Минивэн",
-        "price": 8000,
-        "speed": 4,
-        "photo": "https://i.ibb.co/6RH0DzCN/Screenshot-20260913-121445.jpg",
-        "category": "Легковая",
-        "bonus": "Вместительная",
-    },
-    "suv": {
-        "name": "🚙 Внедорожник",
-        "price": 12000,
-        "speed": 5,
-        "photo": "https://i.ibb.co/WpRxHcrX/Screenshot-20260913-124146.jpg",
-        "category": "Легковая",
-        "bonus": "Проходимая",
-    },
-    "sportcar": {
-        "name": "🏎 Спорткар",
-        "price": 25000,
-        "speed": 9,
-        "photo": "https://i.ibb.co/S7vLRrWg/Screenshot-20260913-124328.jpg",
-        "category": "Спорткар",
-        "bonus": "Быстрая, статус",
-    },
-    "tuned": {
-        "name": "🏎 Тюнингованная",
-        "price": 35000,
-        "speed": 8,
-        "photo": "https://i.ibb.co/bg3gF9NN/Screenshot-20260913-124636.jpg",
-        "category": "Спорткар",
-        "bonus": "Тюнинг, стиль",
-    },
-    "supercar": {
-        "name": "🏎 Суперкар",
-        "price": 50000,
-        "speed": 10,
-        "photo": "https://i.ibb.co/5hvRtSDD/IMG-20260913-124922-303.jpg",
-        "category": "Спорткар",
-        "bonus": "Максимальная скорость",
-    },
+    # Категория A — Мотоциклы
     "moto": {
         "name": "🏍 Мотоцикл",
         "price": 8000,
         "speed": 6,
-        "photo": "https://i.ibb.co/6csXwMZT/Screenshot-20260913-125218.jpg",
-        "category": "Мотоцикл",
+        "category": "A",
+        "category_name": "Мотоциклы",
         "bonus": "Дёшево, быстро",
+        "photo": "https://i.ibb.co/6csXwMZT/Screenshot-20260913-125218.jpg",
     },
     "chopper": {
         "name": "🏍 Чоппер",
         "price": 15000,
         "speed": 5,
-        "photo": "https://i.ibb.co/s9kvpCYD/Screenshot-20260913-125647.jpg",
-        "category": "Мотоцикл",
+        "category": "A",
+        "category_name": "Мотоциклы",
         "bonus": "Стиль, статус",
+        "photo": "https://i.ibb.co/s9kvpCYD/Screenshot-20260913-125647.jpg",
     },
     "sportbike": {
         "name": "🏍 Спорт-байк",
         "price": 18000,
         "speed": 9,
-        "photo": "https://i.ibb.co/fzL6t2YD/Screenshot-20260913-125858.jpg",
-        "category": "Мотоцикл",
+        "category": "A",
+        "category_name": "Мотоциклы",
         "bonus": "Скорость + стиль",
+        "photo": "https://i.ibb.co/fzL6t2YD/Screenshot-20260913-125858.jpg",
     },
+    # Категория B — Легковые
+    "sedan": {
+        "name": "🚗 Sedan",
+        "price": 5000,
+        "speed": 3,
+        "category": "B",
+        "category_name": "Легковые",
+        "bonus": "Универсальная, дёшево",
+        "photo": "https://i.ibb.co/jZH7h8Fr/Screenshot-20260913-110605.jpg",
+    },
+    "minivan": {
+        "name": "🚐 Минивэн",
+        "price": 8000,
+        "speed": 4,
+        "category": "B",
+        "category_name": "Легковые",
+        "bonus": "Вместительная",
+        "photo": "https://i.ibb.co/6RH0DzCN/Screenshot-20260913-121445.jpg",
+    },
+    "suv": {
+        "name": "🚙 Внедорожник",
+        "price": 12000,
+        "speed": 5,
+        "category": "B",
+        "category_name": "Легковые",
+        "bonus": "Проходимая",
+        "photo": "https://i.ibb.co/WpRxHcrX/Screenshot-20260913-124146.jpg",
+    },
+    "sportcar": {
+        "name": "🏎 Спорткар",
+        "price": 25000,
+        "speed": 9,
+        "category": "B",
+        "category_name": "Легковые",
+        "bonus": "Быстрая, статус",
+        "photo": "https://i.ibb.co/S7vLRrWg/Screenshot-20260913-124328.jpg",
+    },
+    "tuned": {
+        "name": "🏎 Тюнингованная",
+        "price": 35000,
+        "speed": 8,
+        "category": "B",
+        "category_name": "Легковые",
+        "bonus": "Тюнинг, стиль",
+        "photo": "https://i.ibb.co/bg3gF9NN/Screenshot-20260913-124636.jpg",
+    },
+    "supercar": {
+        "name": "🏎 Суперкар",
+        "price": 50000,
+        "speed": 10,
+        "category": "B",
+        "category_name": "Легковые",
+        "bonus": "Максимальная скорость",
+        "photo": "https://i.ibb.co/5hvRtSDD/IMG-20260913-124922-303.jpg",
+    },
+    # Категория C — Грузовые
     "truck": {
         "name": "🚚 Грузовик",
         "price": 30000,
         "speed": 3,
-        "photo": "https://i.ibb.co/DHy2gj0V/Screenshot-20260913-125950.jpg",
-        "category": "Грузовой",
+        "category": "C",
+        "category_name": "Грузовые",
         "bonus": "+30% к работе «Грузчик»",
+        "photo": "https://i.ibb.co/DHy2gj0V/Screenshot-20260913-125950.jpg",
     },
 }
 
@@ -140,7 +155,7 @@ async def transport_back(callback: CallbackQuery):
 
 
 # ============================================
-# АВТОСАЛОН
+# АВТОСАЛОН — КАТЕГОРИИ
 # ============================================
 @router.callback_query(F.data == "autosalon")
 async def autosalon(callback: CallbackQuery):
@@ -148,10 +163,49 @@ async def autosalon(callback: CallbackQuery):
 
     await callback.message.delete()
     await callback.message.answer(
-        f"🏎 <b>АВТОСАЛОН</b>\n\n"
+        f"🚗 <b>АВТОСАЛОН</b>\n\n"
         f"💰 Баланс: ${player['balance']}\n\n"
-        f"Выбери машину:",
-        reply_markup=autosalon_kb(),
+        f"Выбери категорию:",
+        reply_markup=autosalon_categories_kb(),
+        parse_mode=ParseMode.HTML,
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "autosalon_a")
+async def autosalon_a(callback: CallbackQuery):
+    player = await get_player(callback.from_user.id)
+
+    await callback.message.edit_text(
+        f"🏍 <b>МОТОЦИКЛЫ (A)</b>\n\n"
+        f"💰 Баланс: ${player['balance']}",
+        reply_markup=autosalon_a_kb(),
+        parse_mode=ParseMode.HTML,
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "autosalon_b")
+async def autosalon_b(callback: CallbackQuery):
+    player = await get_player(callback.from_user.id)
+
+    await callback.message.edit_text(
+        f"🚗 <b>ЛЕГКОВЫЕ (B)</b>\n\n"
+        f"💰 Баланс: ${player['balance']}",
+        reply_markup=autosalon_b_kb(),
+        parse_mode=ParseMode.HTML,
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "autosalon_c")
+async def autosalon_c(callback: CallbackQuery):
+    player = await get_player(callback.from_user.id)
+
+    await callback.message.edit_text(
+        f"🚚 <b>ГРУЗОВЫЕ (C)</b>\n\n"
+        f"💰 Баланс: ${player['balance']}",
+        reply_markup=autosalon_c_kb(),
         parse_mode=ParseMode.HTML,
     )
     await callback.answer()
@@ -178,7 +232,7 @@ async def car_info(callback: CallbackQuery):
         f"📄 <b>ПТС — ПАСПОРТ ТС</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n"
         f"🚘 <b>{car['name']}</b>\n\n"
-        f"📂 Категория: {car['category']}\n"
+        f"📂 Категория: {car['category']} — {car['category_name']}\n"
         f"⚡ Скорость: {car['speed']}/10\n"
         f"💰 Цена: ${car['price']:,}\n"
         f"🎁 Бонус: {car['bonus']}\n"
@@ -195,14 +249,14 @@ async def car_info(callback: CallbackQuery):
     await callback.message.answer_photo(
         photo=car["photo"],
         caption=pts_text,
-        reply_markup=car_info_kb(car_key),
+        reply_markup=car_info_kb(car_key, car["category"]),
         parse_mode=ParseMode.HTML,
     )
     await callback.answer()
 
 
 # ============================================
-# ПОКУПКА МАШИНЫ
+# ПОКУПКА
 # ============================================
 @router.callback_query(F.data.startswith("buycar_"))
 async def buy_car(callback: CallbackQuery):
@@ -265,7 +319,7 @@ async def garage(callback: CallbackQuery):
         caption=(
             f"🏠 <b>ГАРАЖ</b>\n\n"
             f"{car['name']}\n"
-            f"📂 Категория: {car['category']}\n"
+            f"📂 Категория: {car['category']} — {car['category_name']}\n"
             f"⚡ Скорость: {car['speed']}/10\n"
             f"🎁 Бонус: {car['bonus']}\n\n"
             f"Апгрейды (пока недоступны)"
