@@ -1,4 +1,6 @@
-BOT_TOKEN = "8893893820:AAG_fTp5KfHel0ZvDO_a-XemIVFIXv1NaKw"
+import os
+
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 SUPPORT_USERNAME = "pegvi"
 SUPPORT_ID = 6236795210
 DB_PATH = "gta_bot.db"
