@@ -11,7 +11,10 @@ from aiogram.fsm.context import FSMContext
 from aiogram.enums import ParseMode
 
 from database import get_player, update_player
-from keyboards import bank_menu_kb, bank_back_kb
+from keyboards import (
+    bank_menu_kb, bank_back_kb,
+    bank_create_kb, bank_confirm_transfer_kb,
+)
 from states import Bank
 
 
@@ -119,6 +122,19 @@ async def bank_menu(message: Message):
 @router.callback_query(F.data == "bank_back")
 async def bank_back(callback: CallbackQuery):
     player = await get_player(callback.from_user.id)
+
+    if not player.get("bank_account"):
+        await callback.message.delete()
+        await callback.message.answer(
+            f"🏦 <b>БАНК</b>\n\n"
+            f"У тебя нет банковского счёта.\n\n"
+            f"Создать счёт?",
+            reply_markup=bank_create_kb(),
+            parse_mode=ParseMode.HTML,
+        )
+        await callback.answer()
+        return
+
     account = player["bank_account"]
     bank_balance = player.get("bank_balance", 0) or 0
     deposit = player.get("bank_deposit", 0) or 0
@@ -289,7 +305,7 @@ async def process_withdraw(message: Message, state: FSMContext):
 
 
 # ============================================
-# ПЕРЕВОД НА ДРУГОЙ СЧЁТ
+# ПЕРЕВОД
 # ============================================
 @router.callback_query(F.data == "bank_transfer")
 async def bank_transfer(callback: CallbackQuery, state: FSMContext):
@@ -328,7 +344,6 @@ async def process_transfer_account(message: Message, state: FSMContext):
         await message.answer("❌ Нельзя перевести самому себе. Попробуй другой:")
         return
 
-    # Ищем получателя
     import aiosqlite
     from config import DB_PATH
 
@@ -396,7 +411,6 @@ async def process_transfer_amount(message: Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith("bank_confirm_"))
 async def bank_confirm_transfer(callback: CallbackQuery):
-    # Парсим callback: bank_confirm_573920_1000
     parts = callback.data.replace("bank_confirm_", "").split("_")
     if len(parts) != 2:
         await callback.answer("Ошибка")
@@ -412,7 +426,6 @@ async def bank_confirm_transfer(callback: CallbackQuery):
         await callback.answer("💰 Недостаточно", show_alert=True)
         return
 
-    # Ищем получателя
     import aiosqlite
     from config import DB_PATH
 
@@ -428,13 +441,11 @@ async def bank_confirm_transfer(callback: CallbackQuery):
         await callback.answer("Счёт не найден", show_alert=True)
         return
 
-    # Списываем у отправителя
     await update_player(
         callback.from_user.id,
         bank_balance=bank_balance - amount,
     )
 
-    # Зачисляем получателю
     recipient_balance = (recipient["bank_balance"] or 0) + amount
     await update_player(
         recipient["telegram_id"],
