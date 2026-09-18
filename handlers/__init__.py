@@ -3,6 +3,7 @@ from . import jobs
 from . import crime
 from . import cops
 from . import shop
+from . import arsenal
 from . import inventory
 from . import transport
 from . import home
