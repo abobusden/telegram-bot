@@ -573,3 +573,24 @@ def bank_confirm_transfer_kb(account: str, name: str, amount: int):
         )],
         [InlineKeyboardButton(text="❌ Отказаться", callback_data="bank_back")],
     ])
+# ============================================
+# КАЗИНО
+# ============================================
+def casino_menu_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎲 Кубик", callback_data="casino_dice")],
+        [InlineKeyboardButton(text="🎰 Слоты", callback_data="casino_slots")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="casino_back")],
+    ])
+
+
+def casino_back_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 В казино", callback_data="casino_back")],
+    ])
+
+
+def casino_bet_cancel_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="casino_back")],
+    ])
