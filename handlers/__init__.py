@@ -1,8 +1,3 @@
-# ============================================
-# ПОДКЛЮЧЕНИЕ ВСЕХ ХЕНДЛЕРОВ
-# ============================================
-
-# Этапы 1-9
 from . import start
 from . import menu
 from . import jobs
@@ -15,11 +10,11 @@ from . import home
 from . import gangs
 from . import pvp
 from . import city_map
-
-# Этап 10 — Здания
 from . import arsenal
 from . import hospital
 from . import autoservice
 from . import bank
 from . import casino
 from . import race
+from . import death
+from . import events
