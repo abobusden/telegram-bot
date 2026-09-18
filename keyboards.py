@@ -212,6 +212,25 @@ def arsenal_back_kb():
 
 
 # ============================================
+# БОЛЬНИЦА
+# ============================================
+def hospital_menu_kb(balance: int, hp: int):
+    buttons = []
+
+    if hp < 100 and balance >= 500:
+        buttons.append([InlineKeyboardButton(text="💊 Лечиться — $500", callback_data="hospital_heal")])
+
+    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="hospital_back")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def hospital_back_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="hospital_back")],
+    ])
+
+
+# ============================================
 # ТРАНСПОРТ
 # ============================================
 def transport_menu_kb(current_car=None):
