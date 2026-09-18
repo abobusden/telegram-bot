@@ -34,8 +34,10 @@ async def start_web_server():
 
 async def main():
     logging.basicConfig(level=logging.INFO)
+
+    await start_web_server()
+
     await init_db()
-    asyncio.create_task(start_web_server())
 
     bot = Bot(
         token=BOT_TOKEN,
@@ -43,7 +45,6 @@ async def main():
     )
     dp = Dispatcher()
 
-    # Этапы 1-9
     dp.include_router(start.router)
     dp.include_router(menu.router)
     dp.include_router(shop.router)
