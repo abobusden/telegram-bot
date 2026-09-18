@@ -20,10 +20,8 @@ router = Router()
 
 MOSCOW_TZ = pytz.timezone("Europe/Moscow")
 
-# Бонусы по дням
 DAILY_BONUSES = {1: 300, 2: 600, 3: 900, 4: 1200, 5: 1500, 6: 2250, 7: 3000}
 
-# Цены звёзд
 STARS_PACKS = {
     5: 5000,
     10: 12000,
@@ -35,9 +33,6 @@ STARS_PACKS = {
 SUPPORT_USERNAME = "pegvi"
 
 
-# ============================================
-# ПРОВЕРКА ВЫХОДНОГО
-# ============================================
 def is_weekend() -> bool:
     now = datetime.now(MOSCOW_TZ)
     return now.weekday() >= 5
@@ -90,7 +85,6 @@ async def daily_bonus(callback: CallbackQuery):
     last_bonus = player.get("last_bonus")
     streak = player.get("daily_streak", 0) or 0
 
-    # Проверка: можно ли брать бонус?
     if last_bonus:
         try:
             last_dt = datetime.fromisoformat(last_bonus)
@@ -102,7 +96,6 @@ async def daily_bonus(callback: CallbackQuery):
         if last_dt:
             elapsed = now - last_dt
 
-            # Меньше 24 часов → нельзя
             if elapsed.total_seconds() < 24 * 3600:
                 left = 24 * 3600 - int(elapsed.total_seconds())
                 hours, rem = divmod(left, 3600)
@@ -113,7 +106,6 @@ async def daily_bonus(callback: CallbackQuery):
                 )
                 return
 
-            # Больше 48 часов → сброс
             if elapsed.total_seconds() > 48 * 3600:
                 streak = 0
     else:
@@ -178,16 +170,16 @@ async def support_author(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("buy_stars_"))
+@router.callback_query(F.data.startswith("donate_stars_"))
 async def buy_stars(callback: CallbackQuery):
-    stars = int(callback.data.replace("buy_stars_", ""))
+    stars = int(callback.data.replace("donate_stars_", ""))
     bonus = STARS_PACKS.get(stars, 0)
 
     await callback.message.answer_invoice(
         title=f"Поддержка автора — {stars}⭐",
         description=f"Спасибо! Взамен — ${bonus} в игре.",
-        payload=f"stars_{stars}",
-        currency="XTR",   # Telegram Stars
+        payload=f"donate_stars_{stars}",
+        currency="XTR",
         prices=[LabeledPrice(label="Stars", amount=stars)],
     )
     await callback.answer()
@@ -205,8 +197,8 @@ async def pre_checkout(query):
 async def successful_payment(message: Message):
     payload = message.successful_payment.invoice_payload
 
-    if payload.startswith("stars_"):
-        stars = int(payload.replace("stars_", ""))
+    if payload.startswith("donate_stars_"):
+        stars = int(payload.replace("donate_stars_", ""))
         bonus = STARS_PACKS.get(stars, 0)
 
         player = await get_player(message.from_user.id)
@@ -222,4 +214,4 @@ async def successful_payment(message: Message):
                 f"💰 Бонус: +${bonus}\n\n"
                 f"Ты лучший! 🎉",
                 parse_mode=ParseMode.HTML,
-              )
+            )
