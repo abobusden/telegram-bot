@@ -594,3 +594,38 @@ def casino_bet_cancel_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="❌ Отмена", callback_data="casino_back")],
     ])
+# ============================================
+# ГОНКИ
+# ============================================
+def race_menu_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🏎 Быстрый заезд", callback_data="race_fast")],
+        [InlineKeyboardButton(text="👥 Заезд с игроками", callback_data="race_pvp")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="race_back")],
+    ])
+
+
+def race_back_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="race_back")],
+    ])
+
+
+def race_confirm_kb(bet: int):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🏁 Начать заезд", callback_data=f"race_start_{bet}")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="race_back")],
+    ])
+
+
+def race_result_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔁 Ещё раз", callback_data="race_fast")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="race_back")],
+    ])
+
+
+def race_bet_cancel_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="race_back")],
+    ])
