@@ -18,3 +18,7 @@ class Bank(StatesGroup):
 class Casino(StatesGroup):
     dice_bet = State()
     slots_bet = State()
+
+
+class Race(StatesGroup):
+    bet = State()
