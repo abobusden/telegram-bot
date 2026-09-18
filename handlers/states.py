@@ -13,3 +13,8 @@ class Bank(StatesGroup):
     transfer_account = State()
     transfer_amount = State()
     deposit = State()
+
+
+class Casino(StatesGroup):
+    dice_bet = State()
+    slots_bet = State()
