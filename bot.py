@@ -10,9 +10,9 @@ from aiogram.enums import ParseMode
 from config import BOT_TOKEN
 from database import init_db
 from handlers import (
-    start, jobs, crime, cops, shop, arsenal,
-    inventory, transport, home,
-    gangs, pvp, city_map, menu,
+    start, menu, jobs, crime, cops, shop, inventory,
+    transport, home, gangs, pvp, city_map,
+    arsenal, hospital, autoservice, bank, casino, race,
 )
 
 
@@ -43,10 +43,16 @@ async def main():
     )
     dp = Dispatcher()
 
+    # Этапы 1-9
     dp.include_router(start.router)
     dp.include_router(menu.router)
     dp.include_router(shop.router)
     dp.include_router(arsenal.router)
+    dp.include_router(hospital.router)
+    dp.include_router(autoservice.router)
+    dp.include_router(bank.router)
+    dp.include_router(casino.router)
+    dp.include_router(race.router)
     dp.include_router(inventory.router)
     dp.include_router(transport.router)
     dp.include_router(home.router)
