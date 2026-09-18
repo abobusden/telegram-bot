@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 import pytz
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, LabeledPrice
+from aiogram.types import Message, CallbackQuery
 from aiogram.enums import ParseMode
 
 from database import get_player, update_player
@@ -21,16 +21,6 @@ router = Router()
 MOSCOW_TZ = pytz.timezone("Europe/Moscow")
 
 DAILY_BONUSES = {1: 300, 2: 600, 3: 900, 4: 1200, 5: 1500, 6: 2250, 7: 3000}
-
-STARS_PACKS = {
-    5: 5000,
-    10: 12000,
-    25: 35000,
-    50: 80000,
-    100: 200000,
-}
-
-SUPPORT_USERNAME = "pegvi"
 
 
 def is_weekend() -> bool:
@@ -161,57 +151,11 @@ async def claim_bonus(callback: CallbackQuery):
 async def support_author(callback: CallbackQuery):
     await callback.message.edit_text(
         f"⭐ <b>ПОДДЕРЖКА АВТОРА</b>\n\n"
-        f"Спасибо, что играешь!\n"
-        f"Выбери сумму поддержки:\n\n"
-        f"За каждую покупку — игровые деньги в подарок 🎁",
+        f"Спасибо, что играешь!\n\n"
+        f"Ты можешь поддержать автора подарком:\n"
+        f"🎁 @pegvi\n\n"
+        f"Любая поддержка — мотивация делать игру лучше! 💪",
         reply_markup=support_author_kb(),
         parse_mode=ParseMode.HTML,
     )
     await callback.answer()
-
-
-@router.callback_query(F.data.startswith("donate_stars_"))
-async def buy_stars(callback: CallbackQuery):
-    stars = int(callback.data.replace("donate_stars_", ""))
-    bonus = STARS_PACKS.get(stars, 0)
-
-    await callback.message.answer_invoice(
-        title=f"Поддержка автора — {stars}⭐",
-        description=f"Спасибо! Взамен — ${bonus} в игре.",
-        payload=f"donate_stars_{stars}",
-        currency="XTR",
-        prices=[LabeledPrice(label="Stars", amount=stars)],
-    )
-    await callback.answer()
-
-
-# ============================================
-# ОБРАБОТКА ПЛАТЕЖА
-# ============================================
-@router.pre_checkout_query()
-async def pre_checkout(query):
-    await query.answer(ok=True)
-
-
-@router.message(F.successful_payment)
-async def successful_payment(message: Message):
-    payload = message.successful_payment.invoice_payload
-
-    if payload.startswith("donate_stars_"):
-        stars = int(payload.replace("donate_stars_", ""))
-        bonus = STARS_PACKS.get(stars, 0)
-
-        player = await get_player(message.from_user.id)
-        if player:
-            await update_player(
-                message.from_user.id,
-                balance=player["balance"] + bonus,
-            )
-
-            await message.answer(
-                f"⭐ <b>СПАСИБО ЗА ПОДДЕРЖКУ!</b>\n\n"
-                f"💎 Получено: {stars}⭐\n"
-                f"💰 Бонус: +${bonus}\n\n"
-                f"Ты лучший! 🎉",
-                parse_mode=ParseMode.HTML,
-            )
