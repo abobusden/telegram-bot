@@ -234,4 +234,60 @@ async def race_start(callback: CallbackQuery):
     else:
         await update_player(callback.from_user.id, balance=player["balance"])
         result_text = (
-            f"╔══════════════════╗\
+            f"╔══════════════════╗\n"
+            f"║    🏁 ФИНИШ 🏁   ║\n"
+            f"╠══════════════════╣\n"
+            f"║ Ты:    {player_time} сек  ║\n"
+            f"║ NPC:   {npc_time} сек  ║\n"
+            f"╠══════════════════╣\n"
+            f"║ 🤝 НИЧЬЯ         ║\n"
+            f"║ 💰 Ставка возвращена ║\n"
+            f"╚══════════════════╝"
+        )
+
+    await msg.edit_text(result_text, reply_markup=race_result_kb())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "race_pvp")
+async def race_pvp(callback: CallbackQuery, state: FSMContext):
+    player = await get_player(callback.from_user.id)
+
+    if not player.get("car"):
+        await callback.answer("🚗 Сначала купи машину!", show_alert=True)
+        return
+
+    await callback.message.delete()
+    msg = await callback.message.answer(
+        f"👥 <b>ПОИСК ИГРОКА...</b>\n\n"
+        f"⏱ 30 секунд на поиск",
+        parse_mode=ParseMode.HTML,
+    )
+
+    from database import get_online_players
+    import asyncio
+
+    await asyncio.sleep(3)
+
+    opponents = await get_online_players(callback.from_user.id, limit=1)
+
+    if not opponents:
+        await msg.edit_text(
+            f"🤖 <b>ИГРОКОВ НЕТ</b>\n\n"
+            f"Заезд с NPC.\n\n"
+            f"Введи ставку:",
+            parse_mode=ParseMode.HTML,
+        )
+        await state.set_state(Race.bet)
+        return
+
+    await msg.edit_text(
+        f"👥 <b>ИГРОК НАЙДЕН</b>\n\n"
+        f"👤 {opponents[0]['nickname']}\n\n"
+        f"PvP-гонки в разработке.\n"
+        f"Пока заезд с NPC.\n\n"
+        f"Введи ставку:",
+        parse_mode=ParseMode.HTML,
+    )
+    await state.set_state(Race.bet)
+    await callback.answer()
