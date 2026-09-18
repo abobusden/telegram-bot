@@ -17,9 +17,6 @@ from keyboards import (
 
 router = Router()
 
-# ============================================
-# NPC-РАБОТЫ
-# ============================================
 JOBS = {
     "pizza":   {"name": "🍔 Пицца",   "lvl": 1,  "pay": 100, "cd": 180,  "fail_pay": 50,  "exp": 10},
     "courier": {"name": "📦 Курьер",  "lvl": 1,  "pay": 150, "cd": 300,  "fail_pay": 50,  "exp": 15},
@@ -32,9 +29,6 @@ taxi_state = {}
 taxi_hourly = {}
 
 
-# ============================================
-# МЕНЮ РАБОТ
-# ============================================
 @router.message(F.text == "💼 Работа")
 async def jobs_menu(message: Message):
     player = await get_player(message.from_user.id)
@@ -65,9 +59,6 @@ async def jobs_back(callback: CallbackQuery):
     await callback.answer()
 
 
-# ============================================
-# NPC-РАБОТА
-# ============================================
 @router.callback_query(F.data.startswith("job_"))
 async def do_job(callback: CallbackQuery):
     job_key = callback.data.replace("job_", "")
@@ -104,18 +95,23 @@ async def do_job(callback: CallbackQuery):
         if job_key == "loader" and player["car"] == "truck":
             pay = int(pay * 1.3)
 
+        from handlers.events import get_multiplier
+        mult = get_multiplier()
+        pay = pay * mult
+
         new_balance = player["balance"] + pay
         await update_player(callback.from_user.id, balance=new_balance)
 
-        # ✅ Добавляем опыт + автоуровень
         exp_result = await add_exp(callback.from_user.id, job["exp"])
         if exp_result and exp_result["levels_up"] > 0:
             level_up_text = f"\n\n🎉 <b>УРОВЕНЬ {exp_result['level']}!</b>"
 
+        bonus_text = f"\n🔥 ×{mult} (выходной)" if mult > 1 else ""
+
         result_text = (
             f"✅ <b>УСПЕХ!</b>\n\n"
             f"{job['name']}\n"
-            f"💰 +${pay}\n"
+            f"💰 +${pay}{bonus_text}\n"
             f"📊 +{job['exp']} опыта"
         )
     else:
@@ -140,9 +136,6 @@ async def do_job(callback: CallbackQuery):
     await callback.answer()
 
 
-# ============================================
-# МЕНЮ ТАКСИ
-# ============================================
 @router.callback_query(F.data == "taxi_menu")
 async def taxi_menu(callback: CallbackQuery):
     player = await get_player(callback.from_user.id)
@@ -264,9 +257,6 @@ async def taxi_stop_shift(callback: CallbackQuery):
     await callback.answer("Смена окончена")
 
 
-# ============================================
-# NPC-ЗАКАЗ (с опытом + автоуровень)
-# ============================================
 @router.callback_query(F.data == "taxi_wait_order")
 async def taxi_wait_order(callback: CallbackQuery):
     state = taxi_state.get(callback.from_user.id, {})
@@ -325,11 +315,14 @@ async def taxi_wait_order(callback: CallbackQuery):
     pay = 200
     exp_gain = 15
 
+    from handlers.events import get_multiplier
+    mult = get_multiplier()
+    pay = pay * mult
+
     player = await get_player(callback.from_user.id)
     new_balance = player["balance"] + pay
     await update_player(callback.from_user.id, balance=new_balance)
 
-    # ✅ Опыт + автоуровень
     exp_result = await add_exp(callback.from_user.id, exp_gain)
     level_up_text = ""
     if exp_result and exp_result["levels_up"] > 0:
@@ -344,10 +337,12 @@ async def taxi_wait_order(callback: CallbackQuery):
     hourly["count"] += 1
     taxi_hourly[callback.from_user.id] = hourly
 
+    bonus_text = f" ×{mult}" if mult > 1 else ""
+
     await callback.message.edit_text(
         f"🚕 <b>NPC-ЗАКАЗ</b>\n\n"
         f"👤 Клиент: NPC\n"
-        f"💰 +${pay}\n"
+        f"💰 +${pay}{bonus_text}\n"
         f"📊 +{exp_gain} опыта{level_up_text}\n\n"
         f"💰 ${state['earned']} | 📦 {state['orders']}\n"
         f"⏱ За час: {hourly['count']}/10\n"
@@ -357,9 +352,6 @@ async def taxi_wait_order(callback: CallbackQuery):
     await callback.answer("Заказ выполнен!")
 
 
-# ============================================
-# ВЫЗОВ ТАКСИ (КЛИЕНТ)
-# ============================================
 @router.callback_query(F.data == "taxi_call")
 async def taxi_call(callback: CallbackQuery):
     player = await get_player(callback.from_user.id)
