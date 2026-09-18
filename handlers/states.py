@@ -8,8 +8,8 @@ class Reg(StatesGroup):
 
 
 class Bank(StatesGroup):
-    topup = State()                # пополнение счёта
-    withdraw = State()             # снятие со счёта
-    transfer_account = State()     # ввод счёта получателя
-    transfer_amount = State()      # ввод суммы перевода
-    deposit = State()              # ввод суммы вклада
+    topup = State()
+    withdraw = State()
+    transfer_account = State()
+    transfer_amount = State()
+    deposit = State()
