@@ -22,3 +22,9 @@ class Casino(StatesGroup):
 
 class Race(StatesGroup):
     bet = State()
+
+
+class Admin(StatesGroup):
+    find_user = State()
+    give_money = State()
+    set_level = State()
