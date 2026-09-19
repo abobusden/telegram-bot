@@ -17,7 +17,7 @@ from handlers import (
     start, menu, jobs, crime, cops, shop, inventory,
     transport, home, gangs, pvp, city_map,
     arsenal, hospital, autoservice, bank, casino, race,
-    death, events,
+    death, events, top, referral,
 )
 
 
@@ -40,10 +40,8 @@ async def start_web_server():
 async def main():
     logging.basicConfig(level=logging.INFO)
 
-    # Сначала порт (Render ждёт)
     await start_web_server()
 
-    # Потом БД
     await init_db()
 
     bot = Bot(
@@ -52,7 +50,6 @@ async def main():
     )
     dp = Dispatcher()
 
-    # Подключаем роутеры (порядок важен!)
     dp.include_router(start.router)
     dp.include_router(menu.router)
     dp.include_router(shop.router)
@@ -64,6 +61,8 @@ async def main():
     dp.include_router(race.router)
     dp.include_router(death.router)
     dp.include_router(events.router)
+    dp.include_router(top.router)
+    dp.include_router(referral.router)
     dp.include_router(inventory.router)
     dp.include_router(transport.router)
     dp.include_router(home.router)
