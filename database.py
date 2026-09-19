@@ -42,6 +42,7 @@ async def init_db():
                 last_bonus TIMESTAMP,
                 referred_by INTEGER,
                 referral_count INTEGER DEFAULT 0,
+                is_banned INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -54,6 +55,16 @@ async def get_player(telegram_id: int):
         db.row_factory = aiosqlite.Row
         async with db.execute(
             "SELECT * FROM players WHERE telegram_id = ?", (telegram_id,)
+        ) as cur:
+            row = await cur.fetchone()
+            return dict(row) if row else None
+
+
+async def get_player_by_nickname(nickname: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM players WHERE LOWER(nickname) = LOWER(?)", (nickname,)
         ) as cur:
             row = await cur.fetchone()
             return dict(row) if row else None
@@ -256,7 +267,6 @@ async def get_top_by_pvp(limit: int = 15):
 # ТОП БАНД
 # ============================================
 async def get_gang_stats(faction_key: str):
-    """Возвращает статистику банды."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("""
@@ -286,7 +296,6 @@ async def get_gang_stats(faction_key: str):
 
 
 async def get_all_gangs_stats():
-    """Возвращает статистику всех банд, отсортированную по очкам."""
     from config import FACTIONS
 
     results = []
@@ -305,7 +314,6 @@ async def get_all_gangs_stats():
 # РЕФЕРАЛЫ
 # ============================================
 async def get_referrals(telegram_id: int):
-    """Возвращает список тех, кого пригласил игрок."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
