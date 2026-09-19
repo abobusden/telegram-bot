@@ -30,6 +30,8 @@ async def init_db():
                 gang_cooldown TIMESTAMP,
                 pvp_wins INTEGER DEFAULT 0,
                 pvp_losses INTEGER DEFAULT 0,
+                race_wins INTEGER DEFAULT 0,
+                race_total INTEGER DEFAULT 0,
                 engine_level INTEGER DEFAULT 0,
                 nitro INTEGER DEFAULT 0,
                 bank_account TEXT UNIQUE,
@@ -38,6 +40,8 @@ async def init_db():
                 bank_last_interest TIMESTAMP,
                 daily_streak INTEGER DEFAULT 0,
                 last_bonus TIMESTAMP,
+                referred_by INTEGER,
+                referral_count INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -63,16 +67,18 @@ async def nickname_exists(nickname: str) -> bool:
             return await cur.fetchone() is not None
 
 
-async def create_player(telegram_id, nickname, gender, faction, district):
+async def create_player(telegram_id, nickname, gender, faction, district,
+                        referred_by=None):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
             INSERT INTO players
                 (telegram_id, nickname, gender, faction, district,
-                 balance, hp, level, exp)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 balance, hp, level, exp, referred_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             telegram_id, nickname, gender, faction, district,
             START_BALANCE, START_HP, START_LEVEL, START_EXP,
+            referred_by,
         ))
         await db.commit()
 
@@ -197,5 +203,113 @@ async def get_online_players(exclude_id: int, limit: int = 10):
             AND last_active > ?
             LIMIT ?
         """, (exclude_id, threshold.isoformat(), limit)) as cur:
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
+
+
+# ============================================
+# ТОП ИГРОКОВ
+# ============================================
+async def get_top_by_balance(limit: int = 15):
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM players ORDER BY balance DESC LIMIT ?", (limit,)
+        ) as cur:
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
+
+
+async def get_top_by_level(limit: int = 15):
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM players ORDER BY level DESC, exp DESC LIMIT ?", (limit,)
+        ) as cur:
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
+
+
+async def get_top_by_race(limit: int = 15):
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM players WHERE race_wins > 0 ORDER BY race_wins DESC LIMIT ?",
+            (limit,)
+        ) as cur:
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
+
+
+async def get_top_by_pvp(limit: int = 15):
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM players WHERE pvp_wins > 0 ORDER BY pvp_wins DESC LIMIT ?",
+            (limit,)
+        ) as cur:
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
+
+
+# ============================================
+# ТОП БАНД
+# ============================================
+async def get_gang_stats(faction_key: str):
+    """Возвращает статистику банды."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT 
+                COUNT(*) as members,
+                COALESCE(SUM(level), 0) as total_level,
+                COALESCE(SUM(pvp_wins), 0) as total_pvp
+            FROM players
+            WHERE faction = ?
+        """, (faction_key,)) as cur:
+            row = await cur.fetchone()
+            if not row:
+                return {"members": 0, "total_level": 0, "total_pvp": 0, "score": 0}
+
+            members = row["members"]
+            total_level = row["total_level"]
+            total_pvp = row["total_pvp"]
+
+            score = (members * 100) + total_level + (total_pvp * 50)
+
+            return {
+                "members": members,
+                "total_level": total_level,
+                "total_pvp": total_pvp,
+                "score": score,
+            }
+
+
+async def get_all_gangs_stats():
+    """Возвращает статистику всех банд, отсортированную по очкам."""
+    from config import FACTIONS
+
+    results = []
+    for key in FACTIONS:
+        stats = await get_gang_stats(key)
+        stats["key"] = key
+        stats["name"] = FACTIONS[key]["name"]
+        stats["emoji"] = FACTIONS[key]["emoji"]
+        results.append(stats)
+
+    results.sort(key=lambda x: x["score"], reverse=True)
+    return results
+
+
+# ============================================
+# РЕФЕРАЛЫ
+# ============================================
+async def get_referrals(telegram_id: int):
+    """Возвращает список тех, кого пригласил игрок."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM players WHERE referred_by = ?", (telegram_id,)
+        ) as cur:
             rows = await cur.fetchall()
             return [dict(r) for r in rows]
