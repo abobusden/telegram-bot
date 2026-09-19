@@ -20,3 +20,4 @@ from . import death
 from . import events
 from . import top
 from . import referral
+from . import admin
