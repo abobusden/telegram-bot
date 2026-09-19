@@ -12,10 +12,10 @@ from keyboards import referral_menu_kb, back_to_referral_kb
 
 router = Router()
 
-REFERRAL_BONUS_ME = 500       # тебе за друга
-REFERRAL_BONUS_FRIEND = 500   # другу
+REFERRAL_BONUS_ME = 500
+REFERRAL_BONUS_FRIEND = 500
 
-BOT_USERNAME = "GTA_CrimeBot"   # ← замени на свой username
+BOT_USERNAME = "GTA_CrimeBot"
 
 
 @router.callback_query(F.data == "referral_menu")
