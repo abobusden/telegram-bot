@@ -18,3 +18,5 @@ from . import casino
 from . import race
 from . import death
 from . import events
+from . import top
+from . import referral
