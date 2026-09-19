@@ -24,7 +24,7 @@ router = Router()
 
 
 # ============================================
-# /start — с обработкой реферальной ссылки
+# /start — с фото + обработка реферальной ссылки
 # ============================================
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
@@ -51,11 +51,15 @@ async def cmd_start(message: Message, state: FSMContext):
         )
         return
 
-    await message.answer(
-        "🌴 <b>LOS SANTOS</b> 🌴\n\n"
-        "Ты сошёл с трапа самолёта.\n"
-        "В кармане — $500. В голове — план.\n\n"
-        "Кем ты станешь в этом городе?",
+    await message.answer_photo(
+        photo="https://i.ibb.co/Ps9HY2wR/IMG-20260919-102054-132.jpg",
+        caption=(
+            "🌴 <b>ДОБРО ПОЖАЛОВАТЬ В LOS SANTOS</b> 🌴\n\n"
+            "Самолёт приземлился. Ты вышел.\n"
+            "В кармане — $500. В голове — план.\n"
+            "Город не ждёт. Город решает.\n\n"
+            "Кем ты станешь?"
+        ),
         reply_markup=start_kb(),
         parse_mode=ParseMode.HTML,
     )
@@ -66,12 +70,14 @@ async def cmd_start(message: Message, state: FSMContext):
 # ============================================
 @router.callback_query(F.data == "reg_start")
 async def reg_start(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text(
-        "📝 <b>Введи уличное имя</b>\n\n"
-        "• 3–16 символов\n"
-        "• Буквы, цифры, _\n"
-        "• Без пробелов\n\n"
-        "Пример: <code>BigSmoke_88</code>",
+    await callback.message.edit_caption(
+        caption=(
+            "📝 <b>Введи уличное имя</b>\n\n"
+            "• 3–16 символов\n"
+            "• Буквы, цифры, _\n"
+            "• Без пробелов\n\n"
+            "Пример: <code>BigSmoke_88</code>"
+        ),
         parse_mode=ParseMode.HTML,
     )
     await state.set_state(Reg.nickname)
