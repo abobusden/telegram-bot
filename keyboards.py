@@ -680,3 +680,82 @@ def back_to_referral_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔙 К рефералам", callback_data="referral_back")],
     ])
+# ============================================
+# АДМИН-ПАНЕЛЬ
+# ============================================
+def admin_menu_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="👥 Игроки", callback_data="admin_players")],
+        [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="to_city")],
+    ])
+
+
+def admin_user_kb(user_id: int, is_banned: int):
+    buttons = [
+        [InlineKeyboardButton(text="💰 Выдать деньги", callback_data=f"admin_give_{user_id}")],
+        [InlineKeyboardButton(text="⭐ Установить уровень", callback_data=f"admin_level_{user_id}")],
+        [InlineKeyboardButton(text="🎁 Выдать оружие", callback_data=f"admin_weapon_{user_id}")],
+        [InlineKeyboardButton(text="🚗 Выдать машину", callback_data=f"admin_car_{user_id}")],
+        [InlineKeyboardButton(text="🏠 Выдать дом", callback_data=f"admin_home_{user_id}")],
+    ]
+
+    if is_banned:
+        buttons.append([InlineKeyboardButton(text="✅ Разбанить", callback_data=f"admin_unban_{user_id}")])
+    else:
+        buttons.append([InlineKeyboardButton(text="🚫 Забанить", callback_data=f"admin_ban_{user_id}")])
+
+    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="admin_back")])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def admin_weapons_kb(user_id: int):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔫 Пистолет", callback_data=f"admin_setweapon_{user_id}_pistol")],
+        [InlineKeyboardButton(text="🔫🔫 SMG", callback_data=f"admin_setweapon_{user_id}_smg")],
+        [InlineKeyboardButton(text="🎯 Дробовик", callback_data=f"admin_setweapon_{user_id}_shotgun")],
+        [InlineKeyboardButton(text="💥 Автомат", callback_data=f"admin_setweapon_{user_id}_rifle")],
+        [InlineKeyboardButton(text="🛡 Броня", callback_data=f"admin_setweapon_{user_id}_armor")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_back")],
+    ])
+
+
+def admin_cars_kb(user_id: int):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🚗 Sedan", callback_data=f"admin_setcar_{user_id}_sedan")],
+        [InlineKeyboardButton(text="🚐 Минивэн", callback_data=f"admin_setcar_{user_id}_minivan")],
+        [InlineKeyboardButton(text="🚙 Внедорожник", callback_data=f"admin_setcar_{user_id}_suv")],
+        [InlineKeyboardButton(text="🏎 Спорткар", callback_data=f"admin_setcar_{user_id}_sportcar")],
+        [InlineKeyboardButton(text="🏎 Тюнингованная", callback_data=f"admin_setcar_{user_id}_tuned")],
+        [InlineKeyboardButton(text="🏎 Суперкар", callback_data=f"admin_setcar_{user_id}_supercar")],
+        [InlineKeyboardButton(text="🏍 Мотоцикл", callback_data=f"admin_setcar_{user_id}_moto")],
+        [InlineKeyboardButton(text="🏍 Чоппер", callback_data=f"admin_setcar_{user_id}_chopper")],
+        [InlineKeyboardButton(text="🏍 Спорт-байк", callback_data=f"admin_setcar_{user_id}_sportbike")],
+        [InlineKeyboardButton(text="🚚 Грузовик", callback_data=f"admin_setcar_{user_id}_truck")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_back")],
+    ])
+
+
+def admin_homes_kb(user_id: int):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🏨 Мотель", callback_data=f"admin_sethome_{user_id}_motel")],
+        [InlineKeyboardButton(text="🏨 Downtown", callback_data=f"admin_sethome_{user_id}_downtown")],
+        [InlineKeyboardButton(text="🏨 Ritz", callback_data=f"admin_sethome_{user_id}_ritz")],
+        [InlineKeyboardButton(text="🏡 Гантон", callback_data=f"admin_sethome_{user_id}_ganton_house")],
+        [InlineKeyboardButton(text="🏰 Особняк", callback_data=f"admin_sethome_{user_id}_mansion")],
+        [InlineKeyboardButton(text="🏢 Бизнес-центр", callback_data=f"admin_sethome_{user_id}_business")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_back")],
+    ])
+
+
+def admin_back_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_back")],
+    ])
+
+
+def admin_cancel_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_back")],
+    ])
