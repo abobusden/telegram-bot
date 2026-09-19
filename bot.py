@@ -17,7 +17,7 @@ from handlers import (
     start, menu, jobs, crime, cops, shop, inventory,
     transport, home, gangs, pvp, city_map,
     arsenal, hospital, autoservice, bank, casino, race,
-    death, events, top, referral,
+    death, events, top, referral, admin,
 )
 
 
@@ -49,6 +49,9 @@ async def main():
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     dp = Dispatcher()
+
+    # ⚠️ admin — ПЕРВЫМ, чтобы его команды никто не перебил
+    dp.include_router(admin.router)
 
     dp.include_router(start.router)
     dp.include_router(menu.router)
