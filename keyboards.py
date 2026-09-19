@@ -644,3 +644,39 @@ def back_to_map_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔙 К карте", callback_data="map_back")],
     ])
+# ============================================
+# ТОП
+# ============================================
+def top_menu_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💰 По деньгам", callback_data="top_balance")],
+        [InlineKeyboardButton(text="⭐ По уровню", callback_data="top_level")],
+        [InlineKeyboardButton(text="🚩 По бандам", callback_data="top_gangs")],
+        [InlineKeyboardButton(text="🏁 По гонкам", callback_data="top_race")],
+        [InlineKeyboardButton(text="⚔️ По PvP", callback_data="top_pvp")],
+        [InlineKeyboardButton(text="🎁 Рефералы", callback_data="referral_menu")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="to_city")],
+    ])
+
+
+def back_to_top_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 К топу", callback_data="top_back")],
+    ])
+
+
+# ============================================
+# РЕФЕРАЛКА
+# ============================================
+def referral_menu_kb(link: str):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📋 Копировать ссылку", url=link)],
+        [InlineKeyboardButton(text="👥 Мои рефералы", callback_data="referral_list")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="top_back")],
+    ])
+
+
+def back_to_referral_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 К рефералам", callback_data="referral_back")],
+    ])
