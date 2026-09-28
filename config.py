@@ -1,19 +1,38 @@
 import os
 
+# ===== ОСНОВНОЕ =====
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-SUPPORT_USERNAME = "pegvi"
-SUPPORT_ID = 6236795210
-DB_PATH = "gta_bot.db"
+OWNER_ID = 6236795210
 
-START_BALANCE = 500
-START_HP = 100
-START_LEVEL = 1
-START_EXP = 0
+# ===== ПОДПИСИ ОТВЕТОВ =====
+SIGNATURE_MOD = "— Команда Sky World"
+SIGNATURE_OWNER = "— Владелец Sky World"
 
-FACTIONS = {
-    "grove":   {"name": "Grove Street Families", "emoji": "🟢", "district": "Ganton"},
-    "ballas":  {"name": "Ballas",                 "emoji": "🟣", "district": "Idlewood"},
-    "vagos":   {"name": "Los Vagos",              "emoji": "🔵", "district": "East Los Santos"},
-    "aztecas": {"name": "Ацтеки",                 "emoji": "⚪", "district": "El Corona"},
-}
-DEFAULT_DISTRICT = "Ganton"
+# ===== ПРИВЕТСТВИЯ =====
+GREETING_OWNER = "👑 Привет, Владелец!"
+GREETING_MOD = "🛡 Привет, {name}!"
+GREETING_USER = "Привет, {name}!"
+
+# ===== БАЗА ДАННЫХ =====
+DB_PATH = "sky_world.db"
+
+# ===== ТЕКСТЫ =====
+TEXT_BUG_SENT = (
+    "✅ Спасибо! Твоё сообщение о баге отправлено.\n\n"
+    "⏳ Ожидай ответа.\n"
+    "Ответ может занять от 5 минут до 24 часов."
+)
+
+TEXT_IDEA_SENT = (
+    "✅ Спасибо! Твоя идея отправлена.\n\n"
+    "⏳ Ожидай ответа.\n"
+    "Ответ может занять от 5 минут до 24 часов."
+)
+
+TEXT_BLOCKED = (
+    "🚫 Вы заблокированы.\n\n"
+    "📝 Причина: {reason}\n"
+    "⏰ Разблокировка: {until}\n"
+    "👤 Кто: {who}\n\n"
+    "Если блокировка несправедлива — свяжитесь с владельцем."
+)
