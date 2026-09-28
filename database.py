@@ -1,323 +1,353 @@
-# ============================================
-# РАБОТА С БАЗОЙ ДАННЫХ (SQLite)
-# ============================================
-
-import aiosqlite
-from config import DB_PATH, START_BALANCE, START_HP, START_LEVEL, START_EXP
+import sqlite3
+from datetime import datetime, timedelta
+from config import DB_PATH
 
 
-async def init_db():
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS players (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                telegram_id INTEGER UNIQUE NOT NULL,
-                nickname TEXT UNIQUE NOT NULL,
-                gender TEXT NOT NULL,
-                faction TEXT,
-                district TEXT NOT NULL,
-                district_key TEXT DEFAULT 'ganton',
-                balance INTEGER DEFAULT 500,
-                hp INTEGER DEFAULT 100,
-                level INTEGER DEFAULT 1,
-                exp INTEGER DEFAULT 0,
-                wanted INTEGER DEFAULT 0,
-                weapon TEXT,
-                car TEXT,
-                home TEXT,
-                crime_level INTEGER DEFAULT 1,
-                crime_deals INTEGER DEFAULT 0,
-                gang_cooldown TIMESTAMP,
-                pvp_wins INTEGER DEFAULT 0,
-                pvp_losses INTEGER DEFAULT 0,
-                race_wins INTEGER DEFAULT 0,
-                race_total INTEGER DEFAULT 0,
-                engine_level INTEGER DEFAULT 0,
-                nitro INTEGER DEFAULT 0,
-                bank_account TEXT UNIQUE,
-                bank_balance INTEGER DEFAULT 0,
-                bank_deposit INTEGER DEFAULT 0,
-                bank_last_interest TIMESTAMP,
-                daily_streak INTEGER DEFAULT 0,
-                last_bonus TIMESTAMP,
-                referred_by INTEGER,
-                referral_count INTEGER DEFAULT 0,
-                is_banned INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        await db.commit()
+def get_conn():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
-async def get_player(telegram_id: int):
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT * FROM players WHERE telegram_id = ?", (telegram_id,)
-        ) as cur:
-            row = await cur.fetchone()
-            return dict(row) if row else None
+def init_db():
+    conn = get_conn()
+    cur = conn.cursor()
 
-
-async def get_player_by_nickname(nickname: str):
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT * FROM players WHERE LOWER(nickname) = LOWER(?)", (nickname,)
-        ) as cur:
-            row = await cur.fetchone()
-            return dict(row) if row else None
-
-
-async def nickname_exists(nickname: str) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute(
-            "SELECT 1 FROM players WHERE LOWER(nickname) = LOWER(?)", (nickname,)
-        ) as cur:
-            return await cur.fetchone() is not None
-
-
-async def create_player(telegram_id, nickname, gender, faction, district,
-                        referred_by=None):
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("""
-            INSERT INTO players
-                (telegram_id, nickname, gender, faction, district,
-                 balance, hp, level, exp, referred_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            telegram_id, nickname, gender, faction, district,
-            START_BALANCE, START_HP, START_LEVEL, START_EXP,
-            referred_by,
-        ))
-        await db.commit()
-
-
-async def update_player(telegram_id: int, **fields):
-    if not fields:
-        return
-    keys = ", ".join(f"{k} = ?" for k in fields)
-    values = list(fields.values()) + [telegram_id]
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(f"UPDATE players SET {keys} WHERE telegram_id = ?", values)
-        await db.commit()
-
-
-async def add_exp(telegram_id: int, amount: int):
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT level, exp FROM players WHERE telegram_id = ?",
-            (telegram_id,)
-        ) as cur:
-            row = await cur.fetchone()
-            if not row:
-                return None
-
-        level = row["level"]
-        exp = row["exp"] + amount
-        levels_up = 0
-        while exp >= level * 100:
-            exp -= level * 100
-            level += 1
-            levels_up += 1
-
-        await db.execute(
-            "UPDATE players SET level = ?, exp = ? WHERE telegram_id = ?",
-            (level, exp, telegram_id)
+    # Модераторы
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS moderators (
+            user_id INTEGER PRIMARY KEY,
+            username TEXT,
+            full_name TEXT,
+            added_by INTEGER,
+            added_at TEXT
         )
-        await db.commit()
+    """)
 
-        return {"level": level, "exp": exp, "levels_up": levels_up}
-
-
-CRIME_DEALS_PER_LEVEL = 5
-
-
-async def add_crime_deal(telegram_id: int):
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT crime_level, crime_deals FROM players WHERE telegram_id = ?",
-            (telegram_id,)
-        ) as cur:
-            row = await cur.fetchone()
-            if not row:
-                return None
-
-        crime_level = row["crime_level"]
-        crime_deals = row["crime_deals"] + 1
-        leveled_up = False
-
-        if crime_deals >= CRIME_DEALS_PER_LEVEL and crime_level < 5:
-            crime_deals = 0
-            crime_level += 1
-            leveled_up = True
-
-        await db.execute(
-            "UPDATE players SET crime_level = ?, crime_deals = ? WHERE telegram_id = ?",
-            (crime_level, crime_deals, telegram_id)
+    # Владельцы (совладельцы)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS owners (
+            user_id INTEGER PRIMARY KEY,
+            username TEXT,
+            full_name TEXT,
+            added_by INTEGER,
+            added_at TEXT
         )
-        await db.commit()
+    """)
 
-        return {
-            "crime_level": crime_level,
-            "crime_deals": crime_deals,
-            "leveled_up": leveled_up,
-        }
+    # Блокировки
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS blocked (
+            user_id INTEGER PRIMARY KEY,
+            username TEXT,
+            full_name TEXT,
+            until TEXT,
+            reason TEXT,
+            blocked_by INTEGER,
+            blocked_by_role TEXT,
+            blocked_at TEXT
+        )
+    """)
+
+    # Обращения (баги / идеи)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS tickets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            username TEXT,
+            full_name TEXT,
+            type TEXT,
+            text TEXT,
+            photo_id TEXT,
+            status TEXT DEFAULT 'new',
+            assigned_to INTEGER,
+            answer TEXT,
+            answered_by INTEGER,
+            answered_by_role TEXT,
+            created_at TEXT,
+            answered_at TEXT
+        )
+    """)
+
+    # Оценки ответов
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS ratings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticket_id INTEGER,
+            user_id INTEGER,
+            mod_id INTEGER,
+            rating TEXT,
+            created_at TEXT
+        )
+    """)
+
+    # История наказаний
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action TEXT,
+            user_id INTEGER,
+            by_id INTEGER,
+            by_role TEXT,
+            reason TEXT,
+            duration TEXT,
+            created_at TEXT
+        )
+    """)
+
+    conn.commit()
+    conn.close()
 
 
-def get_crime_bonus(crime_level: int) -> float:
-    bonuses = {1: 1.0, 2: 1.1, 3: 1.2, 4: 1.3, 5: 1.5}
-    return bonuses.get(crime_level, 1.0)
+def now_str():
+    return datetime.now().strftime("%d.%m.%Y %H:%M")
 
 
-async def set_gang_cooldown(telegram_id: int, until):
-    await update_player(telegram_id, gang_cooldown=until.isoformat())
+# ================= МОДЕРАТОРЫ =================
+
+def add_moderator(user_id, username, full_name, added_by):
+    conn = get_conn()
+    conn.execute(
+        "INSERT OR REPLACE INTO moderators (user_id, username, full_name, added_by, added_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (user_id, username, full_name, added_by, now_str())
+    )
+    conn.commit()
+    conn.close()
 
 
-async def get_gang_cooldown(telegram_id: int):
-    from datetime import datetime
-    player = await get_player(telegram_id)
-    if not player or not player.get("gang_cooldown"):
+def remove_moderator(user_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM moderators WHERE user_id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_moderators():
+    conn = get_conn()
+    rows = conn.execute("SELECT * FROM moderators").fetchall()
+    conn.close()
+    return rows
+
+
+def is_moderator(user_id):
+    conn = get_conn()
+    row = conn.execute("SELECT 1 FROM moderators WHERE user_id = ?", (user_id,)).fetchone()
+    conn.close()
+    return row is not None
+
+
+# ================= ВЛАДЕЛЬЦЫ =================
+
+def add_owner(user_id, username, full_name, added_by):
+    conn = get_conn()
+    conn.execute(
+        "INSERT OR REPLACE INTO owners (user_id, username, full_name, added_by, added_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (user_id, username, full_name, added_by, now_str())
+    )
+    conn.commit()
+    conn.close()
+
+
+def remove_owner(user_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM owners WHERE user_id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_owners():
+    conn = get_conn()
+    rows = conn.execute("SELECT * FROM owners").fetchall()
+    conn.close()
+    return rows
+
+
+# ================= БЛОКИРОВКИ =================
+
+def block_user(user_id, username, full_name, until, reason, blocked_by, role):
+    conn = get_conn()
+    conn.execute(
+        "INSERT OR REPLACE INTO blocked (user_id, username, full_name, until, reason, blocked_by, blocked_by_role, blocked_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (user_id, username, full_name, until, reason, blocked_by, role, now_str())
+    )
+    conn.execute(
+        "INSERT INTO history (action, user_id, by_id, by_role, reason, duration, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("block", user_id, blocked_by, role, reason, until, now_str())
+    )
+    conn.commit()
+    conn.close()
+
+
+def unblock_user(user_id, by_id, role):
+    conn = get_conn()
+    conn.execute("DELETE FROM blocked WHERE user_id = ?", (user_id,))
+    conn.execute(
+        "INSERT INTO history (action, user_id, by_id, by_role, reason, duration, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("unblock", user_id, by_id, role, "", "", now_str())
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_blocked(user_id):
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM blocked WHERE user_id = ?", (user_id,)).fetchone()
+    conn.close()
+
+    if not row:
         return None
-    try:
-        cd = datetime.fromisoformat(player["gang_cooldown"])
-        if datetime.now() >= cd:
-            await update_player(telegram_id, gang_cooldown=None)
-            return None
-        return cd
-    except:
-        return None
+
+    until = row["until"]
+    if until != "forever":
+        try:
+            until_dt = datetime.strptime(until, "%d.%m.%Y %H:%M")
+            if until_dt < datetime.now():
+                unblock_user(user_id, 0, "system")
+                return None
+        except Exception:
+            pass
+    return row
 
 
-async def add_pvp_win(telegram_id: int):
-    player = await get_player(telegram_id)
-    await update_player(telegram_id, pvp_wins=player["pvp_wins"] + 1)
+def get_all_blocked():
+    conn = get_conn()
+    rows = conn.execute("SELECT * FROM blocked").fetchall()
+    conn.close()
+    return rows
 
 
-async def add_pvp_loss(telegram_id: int):
-    player = await get_player(telegram_id)
-    await update_player(telegram_id, pvp_losses=player["pvp_losses"] + 1)
+# ================= ОБРАЩЕНИЯ =================
+
+def create_ticket(user_id, username, full_name, ttype, text, photo_id=None):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO tickets (user_id, username, full_name, type, text, photo_id, status, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, 'new', ?)",
+        (user_id, username, full_name, ttype, text, photo_id, now_str())
+    )
+    ticket_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return ticket_id
 
 
-async def get_online_players(exclude_id: int, limit: int = 10):
-    from datetime import datetime, timedelta
-    threshold = datetime.now() - timedelta(minutes=5)
-
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute("""
-            SELECT * FROM players
-            WHERE telegram_id != ?
-            AND last_active > ?
-            LIMIT ?
-        """, (exclude_id, threshold.isoformat(), limit)) as cur:
-            rows = await cur.fetchall()
-            return [dict(r) for r in rows]
+def get_ticket(ticket_id):
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,)).fetchone()
+    conn.close()
+    return row
 
 
-# ============================================
-# ТОП ИГРОКОВ
-# ============================================
-async def get_top_by_balance(limit: int = 15):
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT * FROM players ORDER BY balance DESC LIMIT ?", (limit,)
-        ) as cur:
-            rows = await cur.fetchall()
-            return [dict(r) for r in rows]
+def get_active_tickets():
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM tickets WHERE status != 'closed' ORDER BY id DESC LIMIT 20"
+    ).fetchall()
+    conn.close()
+    return rows
 
 
-async def get_top_by_level(limit: int = 15):
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT * FROM players ORDER BY level DESC, exp DESC LIMIT ?", (limit,)
-        ) as cur:
-            rows = await cur.fetchall()
-            return [dict(r) for r in rows]
+def get_user_tickets(user_id):
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM tickets WHERE user_id = ? ORDER BY id DESC LIMIT 20",
+        (user_id,)
+    ).fetchall()
+    conn.close()
+    return rows
 
 
-async def get_top_by_race(limit: int = 15):
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT * FROM players WHERE race_wins > 0 ORDER BY race_wins DESC LIMIT ?",
-            (limit,)
-        ) as cur:
-            rows = await cur.fetchall()
-            return [dict(r) for r in rows]
+def set_ticket_status(ticket_id, status, assigned_to=None):
+    conn = get_conn()
+    if assigned_to is not None:
+        conn.execute(
+            "UPDATE tickets SET status = ?, assigned_to = ? WHERE id = ?",
+            (status, assigned_to, ticket_id)
+        )
+    else:
+        conn.execute("UPDATE tickets SET status = ? WHERE id = ?", (status, ticket_id))
+    conn.commit()
+    conn.close()
 
 
-async def get_top_by_pvp(limit: int = 15):
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT * FROM players WHERE pvp_wins > 0 ORDER BY pvp_wins DESC LIMIT ?",
-            (limit,)
-        ) as cur:
-            rows = await cur.fetchall()
-            return [dict(r) for r in rows]
+def answer_ticket(ticket_id, answer, by_id, role):
+    conn = get_conn()
+    conn.execute(
+        "UPDATE tickets SET answer = ?, answered_by = ?, answered_by_role = ?, "
+        "answered_at = ?, status = 'answered' WHERE id = ?",
+        (answer, by_id, role, now_str(), ticket_id)
+    )
+    conn.commit()
+    conn.close()
 
 
-# ============================================
-# ТОП БАНД
-# ============================================
-async def get_gang_stats(faction_key: str):
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute("""
-            SELECT 
-                COUNT(*) as members,
-                COALESCE(SUM(level), 0) as total_level,
-                COALESCE(SUM(pvp_wins), 0) as total_pvp
-            FROM players
-            WHERE faction = ?
-        """, (faction_key,)) as cur:
-            row = await cur.fetchone()
-            if not row:
-                return {"members": 0, "total_level": 0, "total_pvp": 0, "score": 0}
+# ================= ОЦЕНКИ =================
 
-            members = row["members"]
-            total_level = row["total_level"]
-            total_pvp = row["total_pvp"]
-
-            score = (members * 100) + total_level + (total_pvp * 50)
-
-            return {
-                "members": members,
-                "total_level": total_level,
-                "total_pvp": total_pvp,
-                "score": score,
-            }
+def add_rating(ticket_id, user_id, mod_id, rating):
+    conn = get_conn()
+    conn.execute(
+        "INSERT INTO ratings (ticket_id, user_id, mod_id, rating, created_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (ticket_id, user_id, mod_id, rating, now_str())
+    )
+    conn.commit()
+    conn.close()
 
 
-async def get_all_gangs_stats():
-    from config import FACTIONS
-
-    results = []
-    for key in FACTIONS:
-        stats = await get_gang_stats(key)
-        stats["key"] = key
-        stats["name"] = FACTIONS[key]["name"]
-        stats["emoji"] = FACTIONS[key]["emoji"]
-        results.append(stats)
-
-    results.sort(key=lambda x: x["score"], reverse=True)
-    return results
+def get_mod_ratings(mod_id):
+    conn = get_conn()
+    plus = conn.execute(
+        "SELECT COUNT(*) FROM ratings WHERE mod_id = ? AND rating = 'up'", (mod_id,)
+    ).fetchone()[0]
+    minus = conn.execute(
+        "SELECT COUNT(*) FROM ratings WHERE mod_id = ? AND rating = 'down'", (mod_id,)
+    ).fetchone()[0]
+    conn.close()
+    return plus, minus
 
 
-# ============================================
-# РЕФЕРАЛЫ
-# ============================================
-async def get_referrals(telegram_id: int):
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT * FROM players WHERE referred_by = ?", (telegram_id,)
-        ) as cur:
-            rows = await cur.fetchall()
-            return [dict(r) for r in rows]
+# ================= СТАТИСТИКА =================
+
+def get_mod_stats(mod_id):
+    conn = get_conn()
+    total = conn.execute(
+        "SELECT COUNT(*) FROM tickets WHERE answered_by = ?", (mod_id,)
+    ).fetchone()[0]
+    bugs = conn.execute(
+        "SELECT COUNT(*) FROM tickets WHERE answered_by = ? AND type = 'bug'", (mod_id,)
+    ).fetchone()[0]
+    ideas = conn.execute(
+        "SELECT COUNT(*) FROM tickets WHERE answered_by = ? AND type = 'idea'", (mod_id,)
+    ).fetchone()[0]
+    blocks = conn.execute(
+        "SELECT COUNT(*) FROM history WHERE by_id = ? AND action = 'block'", (mod_id,)
+    ).fetchone()[0]
+    unblocks = conn.execute(
+        "SELECT COUNT(*) FROM history WHERE by_id = ? AND action = 'unblock'", (mod_id,)
+    ).fetchone()[0]
+    conn.close()
+    return {
+        "total": total, "bugs": bugs, "ideas": ideas,
+        "blocks": blocks, "unblocks": unblocks
+    }
+
+
+def get_bot_stats():
+    conn = get_conn()
+    users = conn.execute("SELECT COUNT(DISTINCT user_id) FROM tickets").fetchone()[0]
+    bugs = conn.execute("SELECT COUNT(*) FROM tickets WHERE type = 'bug'").fetchone()[0]
+    ideas = conn.execute("SELECT COUNT(*) FROM tickets WHERE type = 'idea'").fetchone()[0]
+    closed = conn.execute("SELECT COUNT(*) FROM tickets WHERE status = 'closed'").fetchone()[0]
+    active = conn.execute("SELECT COUNT(*) FROM tickets WHERE status != 'closed'").fetchone()[0]
+    blocks = conn.execute("SELECT COUNT(*) FROM history WHERE action = 'block'").fetchone()[0]
+    conn.close()
+    return {
+        "users": users, "bugs": bugs, "ideas": ideas,
+        "closed": closed, "active": active, "blocks": blocks
+    }
