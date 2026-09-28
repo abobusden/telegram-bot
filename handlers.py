@@ -43,16 +43,27 @@ def is_blocked(user_id):
     return db.get_blocked(user_id) is not None
 
 
-async def deny_if_blocked(message: Message):
-    b = db.get_blocked(message.from_user.id)
+async def check_blocked_and_notify(callback_or_message, user_id):
+    """Проверка блокировки. Возвращает True если заблокирован."""
+    b = db.get_blocked(user_id)
     if not b:
         return False
+
     until = "навсегда" if b["until"] == "forever" else b["until"]
     who = "Владелец" if b["blocked_by_role"] == "owner" else "Модератор"
-    await message.answer(TEXT_BLOCKED.format(
-        reason=b["reason"], until=until, who=who
-    ))
+    text = TEXT_BLOCKED.format(reason=b["reason"], until=until, who=who)
+
+    if isinstance(callback_or_message, CallbackQuery):
+        await callback_or_message.message.answer(text)
+        await callback_or_message.answer()
+    else:
+        await callback_or_message.answer(text)
     return True
+
+
+async def deny_if_blocked(message: Message) -> bool:
+    """Для использования внутри message-хендлеров."""
+    return await check_blocked_and_notify(message, message.from_user.id)
 
 
 async def notify_mods_and_owner(bot: Bot, text: str, actions=None, photo_id=None):
@@ -135,8 +146,7 @@ async def cancel_message(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "bug")
 async def ask_bug(callback: CallbackQuery, state: FSMContext):
-    if await deny_if_blocked(callback.message):
-        await callback.answer()
+    if await check_blocked_and_notify(callback, callback.from_user.id):
         return
     await callback.message.answer(
         "🐞 Опиши баг подробно:\n\n"
@@ -154,6 +164,11 @@ async def ask_bug(callback: CallbackQuery, state: FSMContext):
 
 @router.message(Form.waiting_for_bug)
 async def receive_bug(message: Message, state: FSMContext, bot: Bot):
+    # Проверка блокировки
+    if await deny_if_blocked(message):
+        await state.clear()
+        return
+
     if not message.text and not message.caption:
         await message.answer("⚠️ Нужен текст описания. Отправь ещё раз.")
         return
@@ -185,8 +200,7 @@ async def receive_bug(message: Message, state: FSMContext, bot: Bot):
 
 @router.callback_query(F.data == "idea")
 async def ask_idea(callback: CallbackQuery, state: FSMContext):
-    if await deny_if_blocked(callback.message):
-        await callback.answer()
+    if await check_blocked_and_notify(callback, callback.from_user.id):
         return
     await callback.message.answer(
         "💡 Опиши свою идею для сервера Sky World.\n\n"
@@ -199,6 +213,11 @@ async def ask_idea(callback: CallbackQuery, state: FSMContext):
 
 @router.message(Form.waiting_for_idea)
 async def receive_idea(message: Message, state: FSMContext, bot: Bot):
+    # Проверка блокировки
+    if await deny_if_blocked(message):
+        await state.clear()
+        return
+
     if message.photo:
         await message.answer("⚠️ К идее нельзя приложить фото. Опиши словами.")
         return
