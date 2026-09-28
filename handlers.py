@@ -580,3 +580,333 @@ async def my_history(callback: CallbackQuery):
 
     await callback.message.answer("\n".join(lines), reply_markup=back_button())
     await callback.answer()
+# ================= УПРАВЛЕНИЕ МОДЕРАМИ =================
+
+@router.callback_query(F.data == "manage_mods")
+async def manage_mods(callback: CallbackQuery):
+    mods = db.get_moderators()
+    owners = db.get_owners()
+
+    lines = ["🛡 <b>Управление модераторами</b>\n"]
+    lines.append(f"👑 Владельцы ({1 + len(owners)}):")
+    lines.append(f"• {OWNER_ID} (главный)")
+    for o in owners:
+        uname = f"@{o['username']}" if o["username"] else ""
+        lines.append(f"• {o['full_name']} {uname} — {o['user_id']}")
+
+    lines.append(f"\n🛡 Модераторы ({len(mods)}):")
+    if not mods:
+        lines.append("• Пока нет")
+    for m in mods:
+        uname = f"@{m['username']}" if m["username"] else ""
+        lines.append(f"• {m['full_name']} {uname} — {m['user_id']}")
+
+    await callback.message.answer("\n".join(lines), reply_markup=manage_mods_kb())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "add_mod")
+async def add_mod_start(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer(
+        "➕ <b>Добавление модера</b>\n\n"
+        "Отправь ID пользователя.\n\n"
+        "⚠️ Он должен уже нажать /start у бота.",
+        reply_markup=cancel_kb()
+    )
+    await state.set_state(Form.waiting_for_add_mod)
+    await callback.answer()
+
+
+@router.message(Form.waiting_for_add_mod)
+async def add_mod_save(message: Message, state: FSMContext, bot: Bot):
+    try:
+        uid = int(message.text.strip())
+    except ValueError:
+        await message.answer("⚠️ ID должен быть числом.")
+        return
+
+    if db.is_moderator(uid):
+        await message.answer("⚠️ Уже модер.")
+        await state.clear()
+        return
+
+    # Пробуем получить инфу
+    username = None
+    full_name = None
+    try:
+        chat = await bot.get_chat(uid)
+        username = chat.username
+        full_name = chat.full_name
+    except Exception:
+        pass
+
+    db.add_moderator(uid, username, full_name, message.from_user.id)
+    await message.answer(f"✅ Модератор {uid} добавлен.")
+
+    try:
+        await bot.send_message(uid, "🛡 Тебя назначили модератором Sky World!\n\nНапиши /start.")
+    except Exception:
+        pass
+
+    await state.clear()
+    await manage_mods(message)
+
+
+@router.callback_query(F.data == "del_mod")
+async def del_mod_list(callback: CallbackQuery):
+    mods = db.get_moderators()
+    if not mods:
+        await callback.message.answer("Нет модеров.", reply_markup=manage_mods_kb())
+    else:
+        await callback.message.answer("Выбери, кого убрать:", reply_markup=del_mod_kb(mods))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("delmod_"))
+async def del_mod_do(callback: CallbackQuery, bot: Bot):
+    uid = int(callback.data.split("_")[1])
+    db.remove_moderator(uid)
+    await callback.message.answer(f"✅ Модератор {uid} удалён.")
+    try:
+        await bot.send_message(uid, "🛡 Тебя сняли с должности модератора.")
+    except Exception:
+        pass
+    await callback.answer()
+
+
+# ================= УПРАВЛЕНИЕ ВЛАДЕЛЬЦАМИ =================
+
+@router.callback_query(F.data == "manage_owners")
+async def manage_owners(callback: CallbackQuery):
+    owners = db.get_owners()
+    lines = ["👑 <b>Управление владельцами</b>\n"]
+    lines.append(f"👑 Владельцы ({1 + len(owners)}):")
+    lines.append(f"• {OWNER_ID} (главный)")
+    for o in owners:
+        uname = f"@{o['username']}" if o["username"] else ""
+        lines.append(f"• {o['full_name']} {uname} — {o['user_id']}")
+
+    await callback.message.answer("\n".join(lines), reply_markup=manage_owners_kb())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "add_owner")
+async def add_owner_start(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer(
+        "➕ <b>Добавление совладельца</b>\n\n"
+        "Отправь ID пользователя.\n\n"
+        "⚠️ Он получит ВСЕ права владельца.",
+        reply_markup=cancel_kb()
+    )
+    await state.set_state(Form.waiting_for_add_owner)
+    await callback.answer()
+
+
+@router.message(Form.waiting_for_add_owner)
+async def add_owner_save(message: Message, state: FSMContext, bot: Bot):
+    try:
+        uid = int(message.text.strip())
+    except ValueError:
+        await message.answer("⚠️ ID должен быть числом.")
+        return
+
+    username = None
+    full_name = None
+    try:
+        chat = await bot.get_chat(uid)
+        username = chat.username
+        full_name = chat.full_name
+    except Exception:
+        pass
+
+    db.add_owner(uid, username, full_name, message.from_user.id)
+    await message.answer(f"✅ Совладелец {uid} добавлен.")
+
+    try:
+        await bot.send_message(uid, "👑 Тебя назначили совладельцем Sky World!\n\nНапиши /start.")
+    except Exception:
+        pass
+
+    await state.clear()
+    await manage_owners(message)
+
+
+@router.callback_query(F.data == "del_owner")
+async def del_owner_list(callback: CallbackQuery):
+    owners = db.get_owners()
+    if not owners:
+        await callback.message.answer("Нет совладельцев.", reply_markup=manage_owners_kb())
+    else:
+        await callback.message.answer(
+            "Выбери, кого убрать:",
+            reply_markup=del_owner_kb(owners, callback.from_user.id)
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("delowner_"))
+async def del_owner_do(callback: CallbackQuery, bot: Bot):
+    uid = int(callback.data.split("_")[1])
+    if uid == OWNER_ID:
+        await callback.answer("❌ Нельзя удалить главного владельца.", show_alert=True)
+        return
+    db.remove_owner(uid)
+    await callback.message.answer(f"✅ Совладелец {uid} удалён.")
+    try:
+        await bot.send_message(uid, "👑 Тебя сняли с должности совладельца.")
+    except Exception:
+        pass
+    await callback.answer()
+
+
+# ================= УПРАВЛЕНИЕ БЛОКИРОВКАМИ =================
+
+@router.callback_query(F.data == "manage_blocks")
+async def manage_blocks(callback: CallbackQuery):
+    rows = db.get_all_blocked()
+    lines = ["🚫 <b>Управление блокировками</b>\n"]
+
+    if not rows:
+        lines.append("Активных блокировок нет.")
+    else:
+        lines.append(f"Активные блокировки ({len(rows)}):")
+        for r in rows[:15]:
+            until = "навсегда" if r["until"] == "forever" else r["until"]
+            uname = f"@{r['username']}" if r["username"] else str(r["user_id"])
+            lines.append(f"• {uname} — до {until} ({r['reason']})")
+
+    await callback.message.answer("\n".join(lines), reply_markup=manage_blocks_kb())
+    await callback.answer()
+
+
+# ================= ИСТОРИЯ (ВСЯ) =================
+
+@router.callback_query(F.data == "all_history")
+async def all_history(callback: CallbackQuery):
+    conn = db.get_conn()
+    rows = conn.execute("SELECT * FROM history ORDER BY id DESC LIMIT 20").fetchall()
+    conn.close()
+
+    if not rows:
+        await callback.message.answer("📜 История пуста.", reply_markup=back_button())
+        await callback.answer()
+        return
+
+    lines = ["📜 <b>История наказаний:</b>\n"]
+    for r in rows:
+        icon = "🚫" if r["action"] == "block" else "🔓"
+        act = "заблокировал" if r["action"] == "block" else "разблокировал"
+        role = "👑 Владелец" if r["by_role"] == "owner" else "🛡 Модер"
+        extra = f" | ⏰ {r['duration']}" if r["action"] == "block" else ""
+        reason = f" | 📝 {r['reason']}" if r["reason"] else ""
+        lines.append(
+            f"{icon} {role} {act} юзера {r['user_id']}\n"
+            f"🕐 {r['created_at']}{extra}{reason}\n"
+        )
+
+    await callback.message.answer("\n".join(lines), reply_markup=back_button())
+    await callback.answer()
+
+
+# ================= ОЦЕНКИ МОДЕРОВ =================
+
+@router.callback_query(F.data == "mod_ratings")
+async def mod_ratings(callback: CallbackQuery):
+    mods = db.get_moderators()
+    if not mods:
+        await callback.message.answer("Модеров нет.", reply_markup=back_button())
+        await callback.answer()
+        return
+
+    lines = ["📊 <b>Оценки модеров:</b>\n"]
+    for m in mods:
+        up, down = db.get_mod_ratings(m["user_id"])
+        total = up + down
+        pct = round(up / total * 100) if total else 0
+        uname = f"@{m['username']}" if m["username"] else m["user_id"]
+        lines.append(f"🛡 {uname}:\n👍 {up} / 👎 {down} ({pct}%)\n")
+
+    await callback.message.answer("\n".join(lines), reply_markup=back_button())
+    await callback.answer()
+
+
+# ================= СТАТИСТИКА БОТА =================
+
+@router.callback_query(F.data == "bot_stats")
+async def bot_stats(callback: CallbackQuery):
+    s = db.get_bot_stats()
+    mods_count = len(db.get_moderators())
+    owners_count = 1 + len(db.get_owners())
+
+    text = (
+        f"📊 <b>СТАТИСТИКА SKY WORLD</b>\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"👥 Юзеров: {s['users']}\n"
+        f"🛡 Модеров: {mods_count}\n"
+        f"👑 Владельцев: {owners_count}\n\n"
+        f"📥 Обращений: {s['bugs'] + s['ideas']}\n"
+        f"🐞 Багов: {s['bugs']}\n"
+        f"💡 Идей: {s['ideas']}\n"
+        f"✅ Закрыто: {s['closed']}\n"
+        f"⏳ В работе: {s['active']}\n\n"
+        f"🚫 Блокировок: {s['blocks']}"
+    )
+    await callback.message.answer(text, reply_markup=back_button())
+    await callback.answer()
+
+
+# ================= РАССЫЛКА =================
+
+@router.callback_query(F.data == "broadcast")
+async def broadcast_start(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer(
+        "📢 <b>Рассылка</b>\n\n"
+        "Отправь текст, который разошлём всем юзерам.\n"
+        "⚠️ Можно с фото (1 шт).",
+        reply_markup=cancel_kb()
+    )
+    await state.set_state(Form.waiting_for_broadcast)
+    await callback.answer()
+
+
+@router.message(Form.waiting_for_broadcast)
+async def broadcast_send(message: Message, state: FSMContext, bot: Bot):
+    text = message.text or message.caption
+    photo_id = message.photo[-1].file_id if message.photo else None
+
+    if not text:
+        await message.answer("⚠️ Нужен текст.")
+        return
+
+    await state.update_data(bc_text=text, bc_photo=photo_id)
+
+    preview = f"📢 <b>Проверь сообщение:</b>\n\n{text}\n\nРазослать всем?"
+    await message.answer(preview, reply_markup=broadcast_confirm_kb())
+    await state.set_state(None)
+
+
+@router.callback_query(F.data == "broadcast_send")
+async def broadcast_do(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    data = await state.get_data()
+    text = data.get("bc_text")
+    photo = data.get("bc_photo")
+
+    conn = db.get_conn()
+    users = conn.execute("SELECT DISTINCT user_id FROM tickets").fetchall()
+    conn.close()
+
+    sent = 0
+    errors = 0
+    for u in users:
+        try:
+            if photo:
+                await bot.send_photo(u["user_id"], photo, caption=text)
+            else:
+                await bot.send_message(u["user_id"], text)
+            sent += 1
+        except Exception:
+            errors += 1
+
+    await callback.message.answer(f"✅ Рассылка завершена.\n✅ Доставлено: {sent}\n❌ Ошибок: {errors}")
+    await state.clear()
+    await callback.answer()
