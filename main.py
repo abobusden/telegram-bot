@@ -5,6 +5,7 @@ from threading import Thread
 
 from flask import Flask
 from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import BOT_TOKEN
@@ -39,7 +40,10 @@ async def main():
     init_db()
     print("✅ База данных готова.")
 
-    bot = Bot(token=BOT_TOKEN)
+    bot = Bot(
+        token=BOT_TOKEN,
+        default=DefaultBotProperties(parse_mode="HTML")
+    )
     dp = Dispatcher(storage=MemoryStorage())
     dp.include_router(router)
 
