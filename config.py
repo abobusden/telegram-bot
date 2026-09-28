@@ -2,7 +2,7 @@ import os
 
 # ===== ОСНОВНОЕ =====
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-OWNER_ID = 6236795210
+OWNER_ID = 6479447470
 
 # ===== ПОДПИСИ ОТВЕТОВ =====
 SIGNATURE_MOD = "— Команда Sky World"
