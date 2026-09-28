@@ -1,3 +1,2 @@
-aiogram>=3.15.0
-aiosqlite==0.20.0
-pytz
+aiogram==3.13.1
+flask
