@@ -7,7 +7,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
 
 from config import (
-    OWNER_ID, SIGNATURE_MOD, SIGNATURE_OWNER,
+    OWNER_ID, OWNER_IDS, SIGNATURE_MOD, SIGNATURE_OWNER,
     GREETING_OWNER, GREETING_MOD, GREETING_USER,
     TEXT_BUG_SENT, TEXT_IDEA_SENT, TEXT_BLOCKED
 )
@@ -28,16 +28,8 @@ router = Router()
 
 # ================= ПОМОЩНИКИ =================
 
-def fmt_user(row):
-    name = row["full_name"] if "full_name" in row.keys() else "Без имени"
-    uname = f"@{row['username']}" if row["username"] else ""
-    uid = row["user_id"]
-    parts = [p for p in [name, uname, str(uid)] if p]
-    return " | ".join(parts)
-
-
 def role_of(user_id):
-    if user_id == OWNER_ID:
+    if user_id in OWNER_IDS:
         return "owner"
     owners = [o["user_id"] for o in db.get_owners()]
     if user_id in owners:
@@ -66,7 +58,8 @@ async def deny_if_blocked(message: Message):
 async def notify_mods_and_owner(bot: Bot, text: str, actions=None, photo_id=None):
     """Рассылка бага/идеи всем модерам + владельцам."""
     targets = set()
-    targets.add(OWNER_ID)
+    for oid in OWNER_IDS:
+        targets.add(oid)
     for m in db.get_moderators():
         targets.add(m["user_id"])
     for o in db.get_owners():
@@ -83,10 +76,11 @@ async def notify_mods_and_owner(bot: Bot, text: str, actions=None, photo_id=None
 
 
 async def notify_owner(bot: Bot, text: str):
-    try:
-        await bot.send_message(OWNER_ID, text)
-    except Exception as e:
-        logging.warning(f"Не удалось уведомить владельца: {e}")
+    for oid in OWNER_IDS:
+        try:
+            await bot.send_message(oid, text)
+        except Exception as e:
+            logging.warning(f"Не удалось уведомить владельца {oid}: {e}")
 
 
 # ================= /start =================
@@ -183,7 +177,7 @@ async def receive_bug(message: Message, state: FSMContext, bot: Bot):
     )
 
     await notify_mods_and_owner(bot, info, ticket_actions(ticket_id), photo_id)
-    await message.answer(TEXT_BUG_SENT, reply_markup=user_menu() if role_of(message.from_user.id) == "user" else None)
+    await message.answer(TEXT_BUG_SENT)
     await state.clear()
 
 
@@ -231,7 +225,7 @@ async def receive_idea(message: Message, state: FSMContext, bot: Bot):
     await notify_mods_and_owner(bot, info, ticket_actions(ticket_id))
     await message.answer(TEXT_IDEA_SENT)
     await state.clear()
-  # ================= ОТВЕТ ЮЗЕРУ =================
+    # ================= ОТВЕТ ЮЗЕРУ =================
 
 @router.callback_query(F.data.startswith("reply_"))
 async def start_reply(callback: CallbackQuery, state: FSMContext):
@@ -269,7 +263,7 @@ async def send_reply(message: Message, state: FSMContext, bot: Bot):
 
     try:
         await bot.send_message(ticket["user_id"], user_text, reply_markup=rating_kb(ticket_id))
-        await message.answer(f"✅ Ответ отправлен юзеру.")
+        await message.answer("✅ Ответ отправлен юзеру.")
     except Exception as e:
         logging.error(e)
         await message.answer("⚠️ Не удалось отправить ответ.")
@@ -374,7 +368,7 @@ async def choose_block(callback: CallbackQuery):
 
 
 @router.callback_query(F.data.startswith("modblock_"))
-async def mod_block(callback: CallbackQuery, state: FSMContext, bot: Bot):
+async def mod_block(callback: CallbackQuery, state: FSMContext):
     _, ticket_id, minutes = callback.data.split("_")
     ticket = db.get_ticket(int(ticket_id))
     if not ticket:
@@ -425,7 +419,6 @@ async def do_block(message: Message, state: FSMContext, bot: Bot):
 
     db.block_user(user_id, None, None, until, reason, message.from_user.id, role)
 
-    # Уведомить юзера
     try:
         who = "Владелец" if role == "owner" else "Модератор"
         until_str = "навсегда" if until == "forever" else until
@@ -436,7 +429,6 @@ async def do_block(message: Message, state: FSMContext, bot: Bot):
     except Exception:
         pass
 
-    # Уведомить владельца (если блокировал модер)
     if role == "mod":
         await notify_owner(
             bot,
@@ -559,8 +551,7 @@ async def my_stats(callback: CallbackQuery):
 
 @router.callback_query(F.data == "my_history")
 async def my_history(callback: CallbackQuery):
-    import database as d
-    conn = d.get_conn()
+    conn = db.get_conn()
     rows = conn.execute(
         "SELECT * FROM history WHERE by_id = ? ORDER BY id DESC LIMIT 20",
         (callback.from_user.id,)
@@ -580,7 +571,7 @@ async def my_history(callback: CallbackQuery):
 
     await callback.message.answer("\n".join(lines), reply_markup=back_button())
     await callback.answer()
-# ================= УПРАВЛЕНИЕ МОДЕРАМИ =================
+    # ================= УПРАВЛЕНИЕ МОДЕРАМИ =================
 
 @router.callback_query(F.data == "manage_mods")
 async def manage_mods(callback: CallbackQuery):
@@ -588,8 +579,9 @@ async def manage_mods(callback: CallbackQuery):
     owners = db.get_owners()
 
     lines = ["🛡 <b>Управление модераторами</b>\n"]
-    lines.append(f"👑 Владельцы ({1 + len(owners)}):")
-    lines.append(f"• {OWNER_ID} (главный)")
+    lines.append(f"👑 Владельцы ({len(OWNER_IDS) + len(owners)}):")
+    for oid in OWNER_IDS:
+        lines.append(f"• {oid}")
     for o in owners:
         uname = f"@{o['username']}" if o["username"] else ""
         lines.append(f"• {o['full_name']} {uname} — {o['user_id']}")
@@ -630,7 +622,6 @@ async def add_mod_save(message: Message, state: FSMContext, bot: Bot):
         await state.clear()
         return
 
-    # Пробуем получить инфу
     username = None
     full_name = None
     try:
@@ -680,8 +671,9 @@ async def del_mod_do(callback: CallbackQuery, bot: Bot):
 async def manage_owners(callback: CallbackQuery):
     owners = db.get_owners()
     lines = ["👑 <b>Управление владельцами</b>\n"]
-    lines.append(f"👑 Владельцы ({1 + len(owners)}):")
-    lines.append(f"• {OWNER_ID} (главный)")
+    lines.append(f"👑 Владельцы ({len(OWNER_IDS) + len(owners)}):")
+    for oid in OWNER_IDS:
+        lines.append(f"• {oid}")
     for o in owners:
         uname = f"@{o['username']}" if o["username"] else ""
         lines.append(f"• {o['full_name']} {uname} — {o['user_id']}")
@@ -747,7 +739,7 @@ async def del_owner_list(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("delowner_"))
 async def del_owner_do(callback: CallbackQuery, bot: Bot):
     uid = int(callback.data.split("_")[1])
-    if uid == OWNER_ID:
+    if uid in OWNER_IDS:
         await callback.answer("❌ Нельзя удалить главного владельца.", show_alert=True)
         return
     db.remove_owner(uid)
@@ -836,7 +828,7 @@ async def mod_ratings(callback: CallbackQuery):
 async def bot_stats(callback: CallbackQuery):
     s = db.get_bot_stats()
     mods_count = len(db.get_moderators())
-    owners_count = 1 + len(db.get_owners())
+    owners_count = len(OWNER_IDS) + len(db.get_owners())
 
     text = (
         f"📊 <b>СТАТИСТИКА SKY WORLD</b>\n\n"
@@ -870,7 +862,7 @@ async def broadcast_start(callback: CallbackQuery, state: FSMContext):
 
 
 @router.message(Form.waiting_for_broadcast)
-async def broadcast_send(message: Message, state: FSMContext, bot: Bot):
+async def broadcast_preview(message: Message, state: FSMContext):
     text = message.text or message.caption
     photo_id = message.photo[-1].file_id if message.photo else None
 
