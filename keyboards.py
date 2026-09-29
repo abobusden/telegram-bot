@@ -41,6 +41,17 @@ def owner_menu():
     ])
 
 
+# ================= ПОДПИСКА НА КАНАЛЫ =================
+
+def subscribe_kb():
+    from config import CHANNELS
+    buttons = []
+    for ch in CHANNELS:
+        buttons.append([InlineKeyboardButton(text=f"📢 {ch['name']}", url=ch["link"])])
+    buttons.append([InlineKeyboardButton(text="✅ Я подписался", callback_data="check_sub")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 # ================= ОТМЕНА =================
 
 def cancel_kb():
@@ -131,7 +142,7 @@ def del_owner_kb(owners, self_id):
     buttons = []
     for o in owners:
         if o["user_id"] == self_id:
-            continue  # себя удалить нельзя
+            continue
         name = o["full_name"] or "Без имени"
         uname = f"@{o['username']}" if o["username"] else ""
         text = f"🗑 {name} {uname} — {o['user_id']}".strip()
