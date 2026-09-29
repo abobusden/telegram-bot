@@ -13,7 +13,6 @@ def init_db():
     conn = get_conn()
     cur = conn.cursor()
 
-    # Модераторы
     cur.execute("""
         CREATE TABLE IF NOT EXISTS moderators (
             user_id INTEGER PRIMARY KEY,
@@ -24,7 +23,6 @@ def init_db():
         )
     """)
 
-    # Владельцы (совладельцы)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS owners (
             user_id INTEGER PRIMARY KEY,
@@ -35,7 +33,6 @@ def init_db():
         )
     """)
 
-    # Блокировки
     cur.execute("""
         CREATE TABLE IF NOT EXISTS blocked (
             user_id INTEGER PRIMARY KEY,
@@ -49,7 +46,6 @@ def init_db():
         )
     """)
 
-    # Обращения (баги / идеи)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS tickets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,7 +65,6 @@ def init_db():
         )
     """)
 
-    # Оценки ответов
     cur.execute("""
         CREATE TABLE IF NOT EXISTS ratings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -81,7 +76,6 @@ def init_db():
         )
     """)
 
-    # История наказаний
     cur.execute("""
         CREATE TABLE IF NOT EXISTS history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -168,15 +162,16 @@ def get_owners():
 
 def block_user(user_id, username, full_name, until, reason, blocked_by, role):
     conn = get_conn()
+    until_clean = str(until).strip() if until != "forever" else "forever"
     conn.execute(
         "INSERT OR REPLACE INTO blocked (user_id, username, full_name, until, reason, blocked_by, blocked_by_role, blocked_at) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (user_id, username, full_name, until, reason, blocked_by, role, now_str())
+        (user_id, username, full_name, until_clean, reason, blocked_by, role, now_str())
     )
     conn.execute(
         "INSERT INTO history (action, user_id, by_id, by_role, reason, duration, created_at) "
         "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        ("block", user_id, blocked_by, role, reason, until, now_str())
+        ("block", user_id, blocked_by, role, reason, until_clean, now_str())
     )
     conn.commit()
     conn.close()
@@ -203,14 +198,20 @@ def get_blocked(user_id):
         return None
 
     until = row["until"]
-    if until != "forever":
-        try:
-            until_dt = datetime.strptime(until, "%d.%m.%Y %H:%M")
-            if until_dt < datetime.now():
-                unblock_user(user_id, 0, "system")
-                return None
-        except Exception:
-            pass
+    if until == "forever":
+        return row
+
+    try:
+        until_str = str(until).strip()
+        until_dt = datetime.strptime(until_str, "%d.%m.%Y %H:%M")
+        if until_dt <= datetime.now():
+            unblock_user(user_id, 0, "system")
+            return None
+    except Exception as e:
+        print(f"[DB] Ошибка разбора даты '{until}': {e}")
+        unblock_user(user_id, 0, "system")
+        return None
+
     return row
 
 
