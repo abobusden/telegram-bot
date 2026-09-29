@@ -9,7 +9,8 @@ from aiogram.types import Message, CallbackQuery
 from config import (
     OWNER_ID, OWNER_IDS, SIGNATURE_MOD, SIGNATURE_OWNER,
     GREETING_OWNER, GREETING_MOD, GREETING_USER,
-    TEXT_BUG_SENT, TEXT_IDEA_SENT, TEXT_BLOCKED
+    TEXT_BUG_SENT, TEXT_IDEA_SENT, TEXT_BLOCKED,
+    REQUIRE_SUBSCRIBE, CHANNELS
 )
 from keyboards import (
     user_menu, mod_menu, owner_menu, cancel_kb,
@@ -18,7 +19,7 @@ from keyboards import (
     manage_mods_kb, del_mod_kb,
     manage_owners_kb, del_owner_kb,
     manage_blocks_kb, broadcast_confirm_kb,
-    back_button
+    back_button, subscribe_kb
 )
 from states import Form
 import database as db
@@ -62,12 +63,34 @@ async def check_blocked_and_notify(callback_or_message, user_id):
 
 
 async def deny_if_blocked(message: Message) -> bool:
-    """Для использования внутри message-хендлеров."""
     return await check_blocked_and_notify(message, message.from_user.id)
 
 
+async def get_unsubscribed_channels(bot: Bot, user_id: int):
+    """Возвращает список каналов, на которые юзер НЕ подписан."""
+    if not REQUIRE_SUBSCRIBE:
+        return []
+    if user_id in OWNER_IDS:
+        return []
+    if db.is_moderator(user_id):
+        return []
+
+    unsubscribed = []
+    for ch in CHANNELS:
+        try:
+            member = await bot.get_chat_member(ch["id"], user_id)
+            if member.status not in ("member", "administrator", "creator"):
+                unsubscribed.append(ch)
+        except Exception as e:
+            logging.warning(f"Ошибка проверки канала {ch['id']}: {e}")
+    return unsubscribed
+
+
+async def is_subscribed_all(bot: Bot, user_id: int) -> bool:
+    return len(await get_unsubscribed_channels(bot, user_id)) == 0
+
+
 async def notify_mods_and_owner(bot: Bot, text: str, actions=None, photo_id=None):
-    """Рассылка бага/идеи всем модерам + владельцам."""
     targets = set()
     for oid in OWNER_IDS:
         targets.add(oid)
@@ -97,10 +120,19 @@ async def notify_owner(bot: Bot, text: str):
 # ================= /start =================
 
 @router.message(CommandStart())
-async def cmd_start(message: Message, state: FSMContext):
+async def cmd_start(message: Message, state: FSMContext, bot: Bot):
     await state.clear()
     uid = message.from_user.id
     role = role_of(uid)
+
+    # Проверка подписки на все каналы
+    if not await is_subscribed_all(bot, uid):
+        await message.answer(
+            "👋 Добро пожаловать в Sky World!\n\n"
+            "📢 Чтобы пользоваться ботом, подпишись на наши каналы:",
+            reply_markup=subscribe_kb()
+        )
+        return
 
     if role == "owner":
         await message.answer(GREETING_OWNER + "\n\nВыбери действие:", reply_markup=owner_menu())
@@ -116,36 +148,60 @@ async def cmd_start(message: Message, state: FSMContext):
         )
 
 
+@router.callback_query(F.data == "check_sub")
+async def check_sub(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    unsub = await get_unsubscribed_channels(bot, callback.from_user.id)
+    if not unsub:
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        await cmd_start(callback.message, state, bot)
+    else:
+        names = ", ".join([ch["name"] for ch in unsub])
+        await callback.answer(f"❌ Ты не подписан на: {names}", show_alert=True)
+
+
 @router.message(Command("myid"))
 async def cmd_myid(message: Message):
     await message.answer(f"🆔 Твой ID: {message.from_user.id}")
 
 
 @router.callback_query(F.data == "back_to_menu")
-async def back_to_menu(callback: CallbackQuery, state: FSMContext):
+async def back_to_menu(callback: CallbackQuery, state: FSMContext, bot: Bot):
     await state.clear()
-    await cmd_start(callback.message, state)
+    await cmd_start(callback.message, state, bot)
     await callback.answer()
 
 
 @router.callback_query(F.data == "cancel_action")
-async def cancel_action(callback: CallbackQuery, state: FSMContext):
+async def cancel_action(callback: CallbackQuery, state: FSMContext, bot: Bot):
     await state.clear()
-    await callback.message.delete()
-    await cmd_start(callback.message, state)
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+    await cmd_start(callback.message, state, bot)
     await callback.answer()
 
 
 @router.message(F.text == "❌ Отмена")
-async def cancel_message(message: Message, state: FSMContext):
+async def cancel_message(message: Message, state: FSMContext, bot: Bot):
     await state.clear()
-    await cmd_start(message, state)
+    await cmd_start(message, state, bot)
 
 
 # ================= ОТПРАВКА БАГА =================
 
 @router.callback_query(F.data == "bug")
-async def ask_bug(callback: CallbackQuery, state: FSMContext):
+async def ask_bug(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    if not await is_subscribed_all(bot, callback.from_user.id):
+        await callback.message.answer(
+            "📢 Сначала подпишись на наши каналы:",
+            reply_markup=subscribe_kb()
+        )
+        await callback.answer()
+        return
     if await check_blocked_and_notify(callback, callback.from_user.id):
         return
     await callback.message.answer(
@@ -164,7 +220,6 @@ async def ask_bug(callback: CallbackQuery, state: FSMContext):
 
 @router.message(Form.waiting_for_bug)
 async def receive_bug(message: Message, state: FSMContext, bot: Bot):
-    # Проверка блокировки
     if await deny_if_blocked(message):
         await state.clear()
         return
@@ -199,7 +254,14 @@ async def receive_bug(message: Message, state: FSMContext, bot: Bot):
 # ================= ОТПРАВКА ИДЕИ =================
 
 @router.callback_query(F.data == "idea")
-async def ask_idea(callback: CallbackQuery, state: FSMContext):
+async def ask_idea(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    if not await is_subscribed_all(bot, callback.from_user.id):
+        await callback.message.answer(
+            "📢 Сначала подпишись на наши каналы:",
+            reply_markup=subscribe_kb()
+        )
+        await callback.answer()
+        return
     if await check_blocked_and_notify(callback, callback.from_user.id):
         return
     await callback.message.answer(
@@ -213,7 +275,6 @@ async def ask_idea(callback: CallbackQuery, state: FSMContext):
 
 @router.message(Form.waiting_for_idea)
 async def receive_idea(message: Message, state: FSMContext, bot: Bot):
-    # Проверка блокировки
     if await deny_if_blocked(message):
         await state.clear()
         return
