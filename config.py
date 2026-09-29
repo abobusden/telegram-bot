@@ -19,6 +19,21 @@ GREETING_USER = "Привет, {name}!"
 # ===== БАЗА ДАННЫХ =====
 DB_PATH = "sky_world.db"
 
+# ===== ОБЯЗАТЕЛЬНАЯ ПОДПИСКА =====
+REQUIRE_SUBSCRIBE = True
+CHANNELS = [
+    {
+        "id": -1003495203669,
+        "link": "https://t.me/skyworldminemclan",
+        "name": "Sky World [Mine]"
+    },
+    {
+        "id": -1003884509138,
+        "link": "https://t.me/Sky_world_top",
+        "name": "Sky World YouTube"
+    },
+]
+
 # ===== ТЕКСТЫ =====
 TEXT_BUG_SENT = (
     "✅ Спасибо! Твоё сообщение о баге отправлено.\n\n"
